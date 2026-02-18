@@ -1,0 +1,13 @@
+- name: Set Forgejo Organization Secret via API
+  ansible.builtin.uri:
+    url: "{{ forgejo_url }}/api/v1/orgs/{{ forgejo_org_name }}/actions/secrets/{{ item.name }}"
+    method: PUT
+    status_code: [201, 204]
+    body_format: json
+    body:
+      data: "{{ item.value }}"
+    headers:
+      Authorization: "token {{ forgejo_token }}"
+      Content-Type: "application/json"
+  loop: "{{ secrets }}"
+  # no_log: true

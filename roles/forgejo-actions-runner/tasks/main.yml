@@ -1,0 +1,83 @@
+- name: Ensure runner group exists
+  group:
+    name: "{{ runner_group }}"
+    state: present
+
+- name: Ensure runner user exists
+  user:
+    name: "{{ runner_user }}"
+    group: "{{ runner_group }}"
+    home: "{{ runner_home }}"
+    shell: /bin/bash
+    groups: docker
+    append: yes
+    state: present
+
+- name: Create directory for Forgejo Runner
+  file:
+    path: "{{ runner_home }}/forgejo-runner"
+    state: directory
+    owner: "{{ runner_user }}"
+    group: "{{ runner_group }}"
+    mode: '0755'
+
+- name: Download Forgejo runner binary
+  get_url:
+    url: "{{ runner_url }}"
+    dest: "{{ runner_home }}/forgejo-runner/forgejo-runner"
+    mode: '0755'
+    owner: "{{ runner_user }}"
+    group: "{{ runner_group }}"
+
+- name: Create Forgejo Runner configuration file
+  copy:
+    dest: "{{ runner_home }}/forgejo-runner/config.yaml"
+    owner: "{{ runner_user }}"
+    group: "{{ runner_group }}"
+    mode: '0644'
+    content: |
+      runner:
+        file: .runner
+        capacity: 1
+        envs:
+          DOCKER_HOST: unix:///var/run/docker.sock
+      container:
+        network: host
+        privileged: true
+        options: "-v /var/run/docker.sock:/var/run/docker.sock"
+        valid_volumes:
+          - "/var/run/docker.sock:/var/run/docker.sock"
+
+- name: Check if runner is already registered
+  stat:
+    path: "{{ runner_home }}/forgejo-runner/.runner"
+  register: runner_registered
+
+- name: Register Forgejo Runner
+  shell: |
+    ./forgejo-runner register \
+      --instance {{ forgejo_url }} \
+      --token {{ forgejo_registration_token }} \
+      --config config.yaml \
+      --no-interactive
+  args:
+    chdir: "{{ runner_home }}/forgejo-runner/"
+  become: true
+  become_user: "{{ runner_user }}"
+  when: not runner_registered.stat.exists
+  no_log: true
+
+- name: Create Systemd Service for Forgejo Runner
+  template:
+    src: "{{ workdir_service }}"
+    dest: "{{ runner_service_dest }}"
+    mode: '0644'
+    owner: root
+    group: root
+
+- name: Start Forgejo Runner service
+  service:
+    name: "{{ runner_service_name }}"
+    state: started
+    enabled: yes
+    daemon_reload: true

@@ -48,3 +48,21 @@
   roles:
     - role: forgejo
       tags: forgejo
+
+- hosts: root-target-server
+  tags: [forgejo-secret]
+  vars_files:
+    - inventory/host_vars/forgejo-actions-secret.yml   
+  roles:
+    - role: forgejo-secret
+      tags: forgejo-secret
+
+- hosts: root-target-server
+  become: true
+  tags: [forgejo-runner]
+  vars_files:
+    - inventory/host_vars/forgejo-actions-runner.yml   
+  roles:
+    - role: forgejo-actions-runner
+      tags: forgejo-runner
+

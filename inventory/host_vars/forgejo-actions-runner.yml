@@ -1,0 +1,14 @@
+forgejo_url: "{{ lookup('env', 'FORGEJO_URL') }}"
+forgejo_registration_token: "{{ lookup('env', 'FORGEJO_RUNNER_TOKEN') }}"
+
+runner_user: "forgejo-runner"
+runner_group: "forgejo-runner"
+runner_home: "/home/{{ runner_user }}"
+runner_version: "12.6.4"
+runner_package: "forgejo-runner-{{ runner_version }}-linux-amd64"
+runner_url: "https://code.forgejo.org/forgejo/runner/releases/download/v{{ runner_version }}/{{ runner_package }}"
+
+# Lokasi file lokal
+workdir_service: "/workdir/roles/forgejo-actions-runner/files/runner.service.j2"
+runner_service_dest: "/etc/systemd/system/forgejo-runner.service"
+runner_service_name: "forgejo-runner"

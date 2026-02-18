@@ -1,0 +1,15 @@
+[Unit]
+Description=Forgejo Action Runner
+After=network.target docker.socket
+
+[Service]
+Type=simple
+User={{ runner_user }}
+Group={{ runner_group }}
+WorkingDirectory={{ runner_home }}/forgejo-runner
+ExecStart={{ runner_home }}/forgejo-runner/forgejo-runner daemon --config config.yaml
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
