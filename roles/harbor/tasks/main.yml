@@ -1,5 +1,4 @@
 - name: install harbor
-  become: yes
   command: ./install.sh
   args:
     chdir: "{{ harbor_installation_directory }}"

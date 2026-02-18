@@ -1,0 +1,25 @@
+
+- name: Buat direktori aplikasi
+  file:
+    path: "{{ dest_path }}"
+    state: directory
+    mode: '0755'
+
+- name: Copy Docker Compose file ke server
+  copy:
+    src: ./docker/docker-compose.yml
+    dest: "{{ dest_path }}/docker-compose.yml"
+
+- name: Copy konfigurasi .env ke server
+  template:
+    src: forgejo.env.j2
+    dest: "{{ dest_path }}/.env"
+    mode: '0600'
+
+- name: Jalankan Docker Compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ dest_path }}"
+    state: present
+    pull: always
+    env_files:
+      - ".env"

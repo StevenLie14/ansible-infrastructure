@@ -13,5 +13,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN ansible-galaxy collection install ansible.posix
 RUN ansible-galaxy role install robertdebock.harbor
+RUN ansible-galaxy collection install community.docker
 
 CMD ["bash"]

@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=${FORGEJO_DB_USER}
+      - POSTGRES_PASSWORD=${FORGEJO_DB_PASSWD}
+      - POSTGRES_DB=${FORGEJO_DB_NAME}
+    networks:
+      - forgejo_net
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:14.0.2
+    container_name: forgejo
+    restart: always
+    depends_on:
+      - db
+    environment:
+      - USER_UID=${FORGEJO_UID}
+      - USER_GID=${FORGEJO_GID}
+      - FORGEJO__database__DB_TYPE=${FORGEJO_DB_TYPE}
+      - FORGEJO__database__HOST=${FORGEJO_DB_HOST}
+      - FORGEJO__database__NAME=${FORGEJO_DB_NAME}
+      - FORGEJO__database__USER=${FORGEJO_DB_USER}
+      - FORGEJO__database__PASSWD=${FORGEJO_DB_PASSWD}
+    networks:
+      - forgejo_net
+    ports:
+      - "3000:3000"
+      - "2222:22"
+    volumes:
+      - ./data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+
+networks:
+  forgejo_net:
+    driver: bridge

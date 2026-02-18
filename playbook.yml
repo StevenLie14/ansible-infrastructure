@@ -40,3 +40,11 @@
       tags: harbor
     - role: harbor
       tags: harbor
+
+- hosts: root-target-server
+  tags: [forgejo]
+  vars_files:
+    - inventory/host_vars/forgejo.yml   
+  roles:
+    - role: forgejo
+      tags: forgejo

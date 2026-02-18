@@ -1,0 +1,8 @@
+forgejo_version: "14.0.2"
+dest_path: "/home/rnd/forgejo"
+
+forgejo_db_type: "{{ lookup('env', 'FORGEJO_DB_TYPE') }}"
+forgejo_db_host: "{{ lookup('env', 'FORGEJO_DB_HOST') }}"
+forgejo_db_name: "{{ lookup('env', 'FORGEJO_DB_NAME') }}"
+forgejo_db_user: "{{ lookup('env', 'FORGEJO_DB_USER') }}"
+forgejo_db_passwd: "{{ lookup('env', 'FORGEJO_DB_PASSWD') }}"
