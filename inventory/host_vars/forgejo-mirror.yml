@@ -1,0 +1,7 @@
+forgejo_url: "{{ lookup('env', 'FORGEJO_URL') }}"
+forgejo_token: "{{ lookup('env', 'FORGEJO_TOKEN') }}"
+github_token: "{{ lookup('env', 'GITHUB_PAT') }}"
+org_name: "{{ lookup('env', 'FORGEJO_ORG_NAME') }}"
+github_username: "{{ lookup('env', 'GITHUB_USERNAME') }}"
+mirror_interval: "{{ lookup('env', 'MIRROR_INTERVAL') | default('0h10m0s') }}"
+base_path: "/home/rnd/forgejo/data/git/repositories/{{ org_name }}"

@@ -1,15 +1,13 @@
-# config.yaml.j2
 runner:
   file: .runner
   capacity: 1
   envs:
-    # Memasukkan docker host agar runner bisa akses socket
     DOCKER_HOST: unix:///var/run/docker.sock
+  labels: {{ runner_labels | to_yaml }}
+
 container:
-  # Ini adalah setting 'Magic' agar tidak ada 'Docker Kecil' (DinD)
-  # Runner akan menggunakan Docker milik Host (10.22.64.192)
   network: host
   privileged: true
   options: "-v /var/run/docker.sock:/var/run/docker.sock"
   valid_volumes:
-    - "/var/run/docker.sock:/var/run/docker.sock"
+    - "/var/run/docker.sock"

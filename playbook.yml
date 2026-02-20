@@ -66,3 +66,10 @@
     - role: forgejo-actions-runner
       tags: forgejo-runner
 
+- hosts: root-target-server
+  tags: [forgejo-mirror]
+  vars_files:
+    - inventory/host_vars/forgejo-mirror.yml   
+  roles:
+    - role: forgejo-mirror
+      tags: forgejo-mirror

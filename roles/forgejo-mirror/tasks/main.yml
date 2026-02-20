@@ -1,0 +1,81 @@
+
+- name: Initialize repository list
+  set_fact:
+    list_of_repo_names: []
+
+- name: Fetch repository pages
+  ansible.builtin.uri:
+    url: "{{ forgejo_url }}/api/v1/orgs/{{ org_name }}/repos?page={{ item }}&limit=100"
+    method: GET
+    headers:
+      Authorization: "token {{ forgejo_token }}"
+  loop: "{{ range(1, 3) | list }}"
+  register: repo_pages
+
+- name: Combine repository names from all pages (lowercased)
+  set_fact:
+    list_of_repo_names: >-
+      {{
+        repo_pages.results
+        | map(attribute='json')
+        | select('defined')
+        | select('truthy')
+        | list
+        | flatten
+        | map(attribute='name')
+        | map('lower')
+        | list
+      }}
+
+- name: DEBUG - Show detected repositories
+  debug:
+    msg: "Found {{ list_of_repo_names | length }} repositories."
+
+
+- name: Update 'origin' remote URL
+  become: true
+  become_user: rnd
+  ansible.builtin.command:
+    cmd: >-
+      git -C "{{ base_path }}/{{ item }}.git"
+      remote set-url origin
+      https://{{ github_username }}:{{ github_token }}@github.com/{{ org_name }}/{{ item }}.git
+  loop: "{{ list_of_repo_names }}"
+  register: git_update_result
+  ignore_errors: true
+
+- name: DEBUG - Report Update Status
+  debug:
+    msg: "Git remote updated for {{ item.item }} → {{ 'Success' if item.rc == 0 else 'Failed' }}"
+  loop: "{{ git_update_result.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+
+- name: Update mirror settings via API
+  ansible.builtin.uri:
+    url: "{{ forgejo_url }}/api/v1/repos/{{ org_name }}/{{ item }}"
+    method: PATCH
+    headers:
+      Authorization: "token {{ forgejo_token }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      has_actions: true
+      mirror_interval: "{{ mirror_interval }}"
+  loop: "{{ list_of_repo_names }}"
+  ignore_errors: true
+
+- name: Trigger manual mirror sync
+  ansible.builtin.uri:
+    url: "{{ forgejo_url }}/api/v1/repos/{{ org_name }}/{{ item }}/mirror-sync"
+    method: POST
+    headers:
+      Authorization: "token {{ forgejo_token }}"
+    status_code: [200, 202, 204]
+  loop: "{{ list_of_repo_names }}"
+  ignore_errors: true
+
+- name: Completion message
+  debug:
+    msg: "Process completed successfully for {{ list_of_repo_names | length }} repositories."

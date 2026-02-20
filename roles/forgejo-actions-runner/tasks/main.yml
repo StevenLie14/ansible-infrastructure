@@ -29,29 +29,18 @@
     owner: "{{ runner_user }}"
     group: "{{ runner_group }}"
 
-- name: Create Forgejo Runner configuration file
-  copy:
-    dest: "{{ runner_home }}/forgejo-runner/config.yaml"
-    owner: "{{ runner_user }}"
-    group: "{{ runner_group }}"
-    mode: '0644'
-    content: |
-      runner:
-        file: .runner
-        capacity: 1
-        envs:
-          DOCKER_HOST: unix:///var/run/docker.sock
-      container:
-        network: host
-        privileged: true
-        options: "-v /var/run/docker.sock:/var/run/docker.sock"
-        valid_volumes:
-          - "/var/run/docker.sock:/var/run/docker.sock"
-
 - name: Check if runner is already registered
   stat:
     path: "{{ runner_home }}/forgejo-runner/.runner"
   register: runner_registered
+
+- name: Template Forgejo Runner configuration
+  template:
+    src: "{{ workdir_config }}"
+    dest: "{{ runner_home }}/forgejo-runner/config.yaml"
+    owner: "{{ runner_user }}"
+    group: "{{ runner_group }}"
+    mode: '0644'
 
 - name: Register Forgejo Runner
   shell: |
@@ -65,7 +54,6 @@
   become: true
   become_user: "{{ runner_user }}"
   when: not runner_registered.stat.exists
-  no_log: true
 
 - name: Create Systemd Service for Forgejo Runner
   template:
@@ -81,3 +69,9 @@
     state: started
     enabled: yes
     daemon_reload: true
+
+- name: Install Node.js for Actions
+  apt:
+    name: nodejs
+    state: present
+    update_cache: yes
