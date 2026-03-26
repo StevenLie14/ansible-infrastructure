@@ -111,10 +111,16 @@ trivy:
 jobservice:
   # Maximum number of job workers in job service
   max_job_workers: 10
+  job_loggers:
+    - STD_OUTPUT
+    - FILE
+  # The jobLogger sweeper duration
+  logger_sweeper_duration: 1
 
 notification:
   # Maximum retry count for webhook job
   webhook_job_max_retry: 10
+  webhook_job_http_client_timeout: 3
 
 chart:
   # Change the value of absolute_url to enabled can enable absolute url in chart
