@@ -73,3 +73,12 @@
   roles:
     - role: forgejo-mirror
       tags: forgejo-mirror
+
+- hosts: root-target-server
+  become: true
+  tags: [nginx]
+  vars_files:
+    - inventory/host_vars/nginx.yml
+  roles:
+    - role: nginx
+      tags: nginx

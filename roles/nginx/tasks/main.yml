@@ -1,0 +1,38 @@
+- name: Deploy Nginx site configuration from template
+  template:
+    src: files/app_nginx.conf.j2
+    dest: /etc/nginx/sites-available/{{ domain_name }}.conf
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Enable the Nginx site (create symlink)
+  file:
+    src: /etc/nginx/sites-available/{{ domain_name }}.conf
+    dest: /etc/nginx/sites-enabled/{{ domain_name }}.conf
+    state: link
+
+- name: Test Nginx configuration
+  command: nginx -t
+  register: nginx_test
+  changed_when: false
+
+- name: Reload Nginx immediately to apply the new site
+  service:
+    name: nginx
+    state: reloaded
+
+- name: Issue SSL Certificate with Certbot
+  command: >
+    certbot --nginx 
+    -d {{ domain_name }} 
+    --non-interactive 
+    --agree-tos 
+    -m {{ certbot_admin_email }} 
+    --redirect
+  register: certbot_result
+  changed_when: "'Successfully received certificate' in certbot_result.stdout"
+
+- name: Show Certbot Output
+  debug:
+    msg: "{{ certbot_result.stdout_lines | default(['Certbot did not return output or failed.']) }}"

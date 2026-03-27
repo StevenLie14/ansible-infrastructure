@@ -4,5 +4,5 @@ harbor_http_port: "{{ lookup('env', 'HARBOR_HTTP_PORT') }}"
 harbor_https_port: "{{ lookup('env', 'HARBOR_HTTPS_PORT') }}"
 harbor_install: true
 harbor_installation_directory: "/home/harbor"
-harbor_version: "2.15.0"
+harbor_version: "2.6.0"
 harbor_installation_type: online

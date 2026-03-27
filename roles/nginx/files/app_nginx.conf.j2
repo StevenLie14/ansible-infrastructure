@@ -1,0 +1,25 @@
+server {
+    server_name {{ domain_name }};
+
+    location / {
+        proxy_pass http://localhost:{{ frontend_port }};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+{% if has_backend | default(false) %}
+    location ~ /api/ {
+        proxy_pass http://localhost:{{ backend_port }};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+{% endif %}
+
+    error_log /var/log/nginx/{{ domain_name }}_error.log;
+    access_log /var/log/nginx/{{ domain_name }}_access.log;
+}
+
