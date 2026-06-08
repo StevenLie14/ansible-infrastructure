@@ -1,91 +1,122 @@
-# DevOps — Configure Harbor and GitHub Actions Runner with Ansible
+# DevOps — Ansible Infrastructure Automation
 
-This repository provides an **Ansible control container** (built from the included `Dockerfile`) and playbooks/roles to:
+This repository provides an **Ansible control container** (built from the included `Dockerfile`) and playbooks/roles to automate provisioning and configuration of a self-hosted DevOps infrastructure.
 
-* Configure and register a **GitHub Actions self-hosted runner** on a remote host.
-* Deploy and configure **Harbor**, a private container registry.
+---
+
+## What This Does
+
+The playbook (`playbook.yml`) manages the following via tags:
+
+| Tag | Description |
+|---|---|
+| `runner` | Register a **GitHub Actions self-hosted runner** on a remote host |
+| `secret` | Inject **GitHub repository-level secrets** |
+| `docker` | Install and configure **Docker** on the remote host |
+| `certbot` | Install **Certbot** and the Nginx plugin for TLS certificate management |
+| `harbor` | Deploy **Harbor** private container registry |
+| `forgejo` | Deploy **Forgejo** (self-hosted Git service) via Docker Compose |
+| `forgejo-secret` | Inject **Forgejo repository-level secrets** |
+| `forgejo-runner` | Register a **Forgejo Actions runner** on a remote host |
+| `forgejo-mirror` | Configure **repository mirroring** in Forgejo |
+| `nginx` | Deploy an **Nginx reverse proxy** with automatic SSL via Certbot |
 
 ---
 
 ## Overview
 
+* Since **Windows cannot run Ansible natively**, this repository uses **Docker Compose** to start a container with Ansible pre-installed.
 * The control container is built with `Dockerfile` (Ubuntu + Python + `ansible-core` + collections).
-* Since **Windows cannot run Ansible natively**, this repository uses **Docker Compose** to start a container that has Ansible pre-installed.
-* `playbook.yml` is the main entry point and supports two flows via tags:
-
-  * **`runner`** → Configure GitHub Actions self-hosted runner.
-  * **`harbor`** → Configure Harbor container registry.
+* The repository is mounted at `/workdir` inside the container.
+* All sensitive values are read from a `.env` file and passed to Ansible via environment lookups.
 
 ---
 
 ## Prerequisites
 
 * Docker and Docker Compose installed on the host machine (Linux, macOS, or Windows).
-* On **Windows**, PowerShell or Command Prompt to run the provided `.bat` scripts.
-* A [**GitHub PAT (Personal Access Token)**](https://github.com/settings/personal-access-tokens) with permissions to register self-hosted runners.
+* A remote Linux server accessible via SSH.
+* A [**GitHub PAT**](https://github.com/settings/personal-access-tokens) with permissions to register self-hosted runners and manage secrets (for GitHub roles).
+* A Forgejo admin token (for Forgejo roles).
 
 ---
 
 ## Environment Variables
 
-All configuration is managed through a `.env` file (copy from `.env.example`).
+Copy `.env.example` to `.env` and fill in the required values.
 
-### Required variables
+### GitHub / Runner
 
-| Variable                        | Description                                                        |
-| ------------------------------- | ------------------------------------------------------------------ |
-| `GITHUB_PAT`                    | GitHub personal access token for runner registration.              |
-| `ANSIBLE_HOST`                  | Target host IP or hostname.                                        |
-| `ANSIBLE_USER` / `ANSIBLE_PASS` | SSH credentials for connecting to target host.                     |
-| `RUNNER_USER`                   | Linux account name to create for GitHub runner.                    |
-| `HARBOR_ADMIN_PASSWORD`         | Initial Harbor admin password.                                     |
-| `HARBOR_HTTP_PORT`              | Port to expose Harbor over HTTP (default 80 or custom).            |
-| `HARBOR_HTTPS_PORT`             | Port to expose Harbor over HTTPS (default 443 or custom).          |
-| `ANSIBLE_HOST_KEY_CHECKING`     | (Optional) Set to `False` to disable SSH host key checking.        |
-| `GITHUB_REPO_URL`               | Repository URL where the GitHub Actions runner will be registered. |
-| `REGISTRY_URL`                  | Harbor (or other container registry) URL.  (Without https://)                        |
-| `REGISTRY_USERNAME`             | Username for authenticating with the registry.                     |
-| `REGISTRY_PASSWORD`             | Password for authenticating with the registry.                     |
-| `VAULT_URL`                     | HashiCorp Vault server URL.                                        |
-| `VAULT_USERNAME`                | Username for authenticating with Vault.                            |
-| `VAULT_PASSWORD`                | Password for authenticating with Vault.                            |
-| `VAULT_PATH`                    | Path in Vault where secrets are stored.                            |
+| Variable | Description |
+|---|---|
+| `ANSIBLE_HOST` | Target host IP or hostname |
+| `ANSIBLE_USER` / `ANSIBLE_PASS` | SSH credentials for the target host |
+| `ANSIBLE_HOST_KEY_CHECKING` | Set to `False` to disable SSH host key checking |
+| `GITHUB_PAT` | GitHub personal access token for runner registration |
+| `GITHUB_REPO_URL` | Repository URL where the runner will be registered |
+| `RUNNER_USER` | Linux account to create for the GitHub runner |
 
+### Harbor
 
-### Adding Custom Secrets
+| Variable | Description |
+|---|---|
+| `HARBOR_ADMIN_PASSWORD` | Initial Harbor admin password |
+| `HARBOR_HTTP_PORT` | HTTP port for Harbor (default `80`) |
+| `HARBOR_HTTPS_PORT` | HTTPS port for Harbor (default `443`) |
+| `REGISTRY_URL` | Harbor URL (without `https://`) |
+| `REGISTRY_USERNAME` | Registry username |
+| `REGISTRY_PASSWORD` | Registry password |
 
-This setup also supports injecting **repository-level GitHub secrets**.
+### HashiCorp Vault (optional)
 
-1. Add your secret variable(s) in `.env`. Example:
+| Variable | Description |
+|---|---|
+| `VAULT_URL` | Vault server URL |
+| `VAULT_USERNAME` | Vault username |
+| `VAULT_PASSWORD` | Vault password |
+| `VAULT_PATH` | Path in Vault where secrets are stored |
 
-   ```env
-   MY_SECRET_KEY=my_secret_value
-   ```
+### Nginx / Certbot
 
-2. Map the secret in `inventory/host_vars/github-actions-secret.yml` under the `secrets` list:
+| Variable | Description |
+|---|---|
+| `CERTBOT_ADMIN_EMAIL` | Email for Let's Encrypt certificate registration |
 
-   ```yaml
-   secrets:
-     - name: "MY_SECRET_KEY"
-       value: "{{ lookup('env', 'MY_SECRET_KEY') }}"
-   ```
+---
 
-⚠️ **Important**: If you change values in `.env`, you must re-run:
+## Adding Custom Secrets
+
+### GitHub Secrets
+
+Add the variable in `.env`:
+
+```env
+MY_SECRET_KEY=my_secret_value
+```
+
+Then map it in `inventory/host_vars/github-actions-secret.yml`:
+
+```yaml
+secrets:
+  - name: "MY_SECRET_KEY"
+    value: "{{ lookup('env', 'MY_SECRET_KEY') }}"
+```
+
+### Forgejo Secrets
+
+Same pattern — add to `.env` and map in `inventory/host_vars/forgejo-actions-secret.yml`.
+
+⚠️ **After changing `.env` values**, rebuild the container to apply them:
 
 ```bash
 docker-compose up -d --build
 ```
 
-This ensures the updated environment variables are applied to the Ansible control container.
-
-
-
 ---
-
 
 ## Setup and Run
 
-1. Copy `.env.example` to `.env` and update with your values:
+1. Copy and configure `.env`:
 
    ```bash
    cp .env.example .env
@@ -97,93 +128,76 @@ This ensures the updated environment variables are applied to the Ansible contro
    docker-compose up -d --build
    ```
 
-   > This starts a container with Ansible pre-installed. The repository is mounted at `/workdir` inside the container.
-
-3. Run playbooks:
-
-   **Windows (via scripts):**
-
-   * Configure GitHub Actions runner:
-
-     ```bash
-     run_action.bat
-     ```
-   * Configure Harbor:
-
-     ```bash
-     run_harbor.bat
-     ```
-
-   * Configure Github Actions Secret (Repository Level):
-
-     ```bash
-     run_secret.bat
-     ```
-
-   **Manually (inside the container):**
+3. Run playbooks inside the container:
 
    ```bash
-   # Configure runner
+   # GitHub Actions runner
    ansible-playbook -i inventory/hosts/hosts.yml playbook.yml --tags runner
 
-   # Configure Harbor
+   # GitHub repository secrets
+   ansible-playbook -i inventory/hosts/hosts.yml playbook.yml --tags secret
+
+   # Install Docker
+   ansible-playbook -i inventory/hosts/hosts.yml playbook.yml --tags docker
+
+   # Install Certbot + Nginx
+   ansible-playbook -i inventory/hosts/hosts.yml playbook.yml --tags certbot
+
+   # Deploy Harbor
    ansible-playbook -i inventory/hosts/hosts.yml playbook.yml --tags harbor
 
-   # Configure Secret
-   ansible-playbook -i inventory/hosts/hosts.yml playbook.yml --tags secret
+   # Deploy Forgejo
+   ansible-playbook -i inventory/hosts/hosts.yml playbook.yml --tags forgejo
+
+   # Forgejo secrets
+   ansible-playbook -i inventory/hosts/hosts.yml playbook.yml --tags forgejo-secret
+
+   # Forgejo Actions runner
+   ansible-playbook -i inventory/hosts/hosts.yml playbook.yml --tags forgejo-runner
+
+   # Forgejo mirror
+   ansible-playbook -i inventory/hosts/hosts.yml playbook.yml --tags forgejo-mirror
+
+   # Nginx reverse proxy + SSL
+   ansible-playbook -i inventory/hosts/hosts.yml playbook.yml --tags nginx
    ```
-
----
-
-
-
-## Notes on Harbor Admin Account
-
-* The value of **`HARBOR_ADMIN_PASSWORD`** is **only valid for the very first login**.
-* After logging in for the first time:
-
-  1. Create a new user immediately.
-  2. Assign this new user as an **administrator**.
-  3. Do not rely on the `admin` account, as it will become disabled after initial use.
-
-⚠️ If you skip this step and lose access to the admin account, you cannot reset it from the UI.
-
-### Recovery steps (on target server)
-
-If the `admin` user becomes unusable:
-
-1. SSH into the server where Harbor is running.
-
-2. Access the Harbor database:
-
-   ```bash
-   cd /home/harbor
-   docker exec -it harbor-db psql -U postgres
-   \c registry
-   update harbor_user set salt='', password='' where user_id = 1;
-   ```
-
-   This resets the `admin` password to empty (`""`).
-
-3. Restart Harbor to apply changes:
-
-   ```bash
-   docker-compose down -v
-   docker-compose up -d
-   ```
-
-You can now log in again with the `admin` account with default password.
 
 ---
 
 ## Inventory and Variables
 
-* **Inventory file**: `inventory/hosts/hosts.yml`
-  Uses environment lookups for sensitive values (e.g., GitHub token, SSH password).
-
-* **Host-specific variables**:
-
-  * `inventory/host_vars/github-action-runner.yml`: contains runner-specific variables such as `repo_url`.
-  * Additional host-specific variables can be defined under `inventory/host_vars/` for flexibility.
+* **Inventory file**: `inventory/hosts/hosts.yml` — uses environment lookups for sensitive values.
+* **Host-specific variables** under `inventory/host_vars/`:
+  * `github-actions-runner.yml` — runner repo URL and related settings
+  * `github-actions-secret.yml` — GitHub secrets to inject
+  * `harbor.yml` — Harbor deployment config
+  * `forgejo.yml` — Forgejo deployment config
+  * `forgejo-actions-secret.yml` — Forgejo secrets to inject
+  * `forgejo-actions-runner.yml` — Forgejo runner config
+  * `forgejo-mirror.yml` — Mirror source/target config
+  * `nginx.yml` — Domain name, ports, and certbot email
 
 ---
+
+## Notes on Harbor Admin Account
+
+* `HARBOR_ADMIN_PASSWORD` is only valid for the **first login**.
+* After first login: create a new user, assign it as administrator, and stop using the `admin` account.
+
+### Recovery (if admin account is lost)
+
+SSH into the server and reset via the database:
+
+```bash
+cd /home/harbor
+docker exec -it harbor-db psql -U postgres
+\c registry
+update harbor_user set salt='', password='' where user_id = 1;
+```
+
+Then restart Harbor:
+
+```bash
+docker-compose down -v
+docker-compose up -d
+```

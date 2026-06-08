@@ -1,5 +1,5 @@
-domain_name: "n8n.stevenlie.my.id"
-frontend_port: 5678
+domain_name: "neo.stevenlie.my.id"
+frontend_port: 7474
 has_backend: false
 backend_port: 5000
 certbot_admin_email: "{{ lookup('env', 'CERTBOT_ADMIN_EMAIL') }}"
