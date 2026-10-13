@@ -57,7 +57,7 @@
     - role: forgejo-secret
       tags: forgejo-secret
 
-- hosts: root-target-server
+- hosts: "{{ target_host | default('root-target-server') }}"
   become: true
   tags: [forgejo-runner]
   vars_files:

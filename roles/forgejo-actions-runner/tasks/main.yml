@@ -47,6 +47,7 @@
     ./forgejo-runner register \
       --instance {{ forgejo_url }} \
       --token {{ forgejo_registration_token }} \
+      --name {{ runner_name }} \
       --config config.yaml \
       --no-interactive
   args:

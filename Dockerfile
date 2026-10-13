@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-ARG ANSIBLE_VERSION=2.19.0
+ARG ANSIBLE_VERSION=2.16.19
 
 RUN pip install --no-cache-dir ansible-core==${ANSIBLE_VERSION}
 
