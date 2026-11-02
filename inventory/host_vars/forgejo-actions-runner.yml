@@ -1,19 +1,31 @@
 forgejo_url: "{{ lookup('env', 'FORGEJO_URL') }}"
 forgejo_registration_token: "{{ lookup('env', 'FORGEJO_RUNNER_TOKEN') }}"
 
-runner_user: "forgejo-runner"
-runner_group: "forgejo-runner"
-runner_home: "/home/{{ runner_user }}"
-runner_version: "12.6.4"
-runner_package: "forgejo-runner-{{ runner_version }}-linux-amd64"
-runner_url: "https://code.forgejo.org/forgejo/runner/releases/download/v{{ runner_version }}/{{ runner_package }}"
+runner_dir: "/opt/forgejo-runner"
 
-workdir_service: "/workdir/roles/forgejo-actions-runner/files/runner.service.j2"
-workdir_config: "/workdir/roles/forgejo-actions-runner/files/config.yaml.j2"
-runner_service_dest: "/etc/systemd/system/forgejo-runner.service"
-runner_service_name: "forgejo-runner"
-runner_name: "syahdan"
+# *.slc.net (Forgejo, Harbor, Vault) is signed by the SLC root CA.
+runner_ca_file: "/workdir/keys/vault-ca.pem"
+runner_registry_host: "{{ lookup('env', 'REGISTRY_URL') }}"
+runner_name: "ci-dev"
+runner_capacity: 1
+
+# Pinned by digest so a re-pushed tag cannot change what runs CI.
+runner_image: "code.forgejo.org/forgejo/runner:12.6.4@sha256:2b65f3ba4345026d66de34dc8eddabb7b0f64c0e14905193ae81746f2728caa0"
+runner_dind_image: "code.forgejo.org/oci/docker:dind@sha256:9e79b879b177fbd72c34376a3dd3d91747da5db49e1f560f76aea59561471977"
+
+# Every job runs in a fresh container of this image (node, docker CLI with
+# buildx, ssh, jq). Workflows ask for it with `runs-on: ci`.
 runner_labels:
-  - "docker:host"
-  - "forgejo:host"
-  - "syahdan:host"
+  - "ci:docker://ghcr.io/catthehacker/ubuntu:act-22.04@sha256:f5f5c29208c4fd541704fe7b8df33d3bf620ce4ac46f36853b7abeb0159705c4"
+
+# DNS servers for containers inside dind. Defaults to the runner host's own
+# resolvers; set it by hand if the host uses a 127.x stub (systemd-resolved).
+runner_dind_dns:
+  - "10.22.64.21"
+runner_dind_extra_args: []
+
+workdir_compose: "/workdir/roles/forgejo-actions-runner/files/docker-compose.yml.j2"
+workdir_config: "/workdir/roles/forgejo-actions-runner/files/config.yaml.j2"
+
+runner_dind_mem_limit: "3g"
+runner_dind_cpus: ""

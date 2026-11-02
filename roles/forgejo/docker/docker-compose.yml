@@ -8,13 +8,13 @@ services:
       - POSTGRES_DB=${FORGEJO_DB_NAME}
     networks:
       - forgejo_net
-    ports:
-      - "5432:5432"
+    # No published port: Forgejo reaches it as db:5432 on forgejo_net, and
+    # nothing outside this host should talk to the database directly.
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
 
   forgejo:
-    image: codeberg.org/forgejo/forgejo:14.0.2
+    image: code.forgejo.org/forgejo/forgejo:${FORGEJO_VERSION:-17.0.0}
     container_name: forgejo
     restart: always
     depends_on:
@@ -30,8 +30,8 @@ services:
     networks:
       - forgejo_net
     ports:
-      - "3000:3000"
-      - "2222:22"
+      - "${FORGEJO_HTTP_PORT:-3000}:3000"
+      - "${FORGEJO_SSH_PORT:-2222}:22"
     volumes:
       - ./data:/data
       - /etc/timezone:/etc/timezone:ro

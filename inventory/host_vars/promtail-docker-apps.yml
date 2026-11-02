@@ -1,0 +1,6 @@
+promtail_project: "promtail"
+promtail_service: "promtail"
+promtail_config_file: "promtail-apps.yaml"
+promtail_mounts:
+  - /var/lib/docker/containers:/var/lib/docker/containers:ro
+  - /var/run/docker.sock:/var/run/docker.sock:ro

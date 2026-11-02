@@ -1,0 +1,167 @@
+- name: Install host packages
+  apt:
+    name: [git, jq, openssh-client, curl, ca-certificates, cron, xz-utils]
+    state: present
+
+- name: Check Node.js
+  stat:
+    path: "/opt/node-{{ host_runner_node_version }}-linux-x64/bin/node"
+  register: node_installed
+
+- name: Download Node.js tarball
+  get_url:
+    url: "https://nodejs.org/dist/{{ host_runner_node_version }}/node-{{ host_runner_node_version }}-linux-x64.tar.xz"
+    dest: "/tmp/node-{{ host_runner_node_version }}.tar.xz"
+    checksum: "sha256:{{ host_runner_node_sha256 }}"
+    mode: "0644"
+  when: not node_installed.stat.exists
+
+- name: Unpack Node.js
+  unarchive:
+    src: "/tmp/node-{{ host_runner_node_version }}.tar.xz"
+    dest: /opt
+    remote_src: true
+    creates: "/opt/node-{{ host_runner_node_version }}-linux-x64/bin/node"
+
+- name: Link Node.js binaries
+  file:
+    src: "/opt/node-{{ host_runner_node_version }}-linux-x64/bin/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+    force: true
+  loop: [node, npm, npx]
+
+- name: Add swap file
+  shell: |
+    set -e
+    fallocate -l {{ host_runner_swap_mb }}M /swapfile-runner
+    chmod 600 /swapfile-runner
+    mkswap /swapfile-runner
+    swapon /swapfile-runner
+    echo '/swapfile-runner none swap sw 0 0' >> /etc/fstab
+  args:
+    creates: /swapfile-runner
+
+- name: Trust the SLC root CA on the host
+  copy:
+    src: "{{ host_runner_ca_file }}"
+    dest: /usr/local/share/ca-certificates/slc-root-ca.crt
+    mode: "0644"
+  register: host_ca
+
+- name: Refresh the host CA store
+  command: update-ca-certificates
+  when: host_ca.changed
+
+- name: Create the registry certs directory
+  file:
+    path: "/etc/docker/certs.d/{{ host_runner_registry_host }}"
+    state: directory
+    mode: "0755"
+
+- name: Trust the SLC root CA for the registry
+  copy:
+    src: "{{ host_runner_ca_file }}"
+    dest: "/etc/docker/certs.d/{{ host_runner_registry_host }}/ca.crt"
+    mode: "0644"
+
+- name: Ensure the runner user exists in the docker group
+  user:
+    name: "{{ host_runner_user }}"
+    groups: docker
+    append: true
+    shell: /bin/bash
+    create_home: true
+
+- name: Create runner directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ host_runner_user }}"
+    group: "{{ host_runner_user }}"
+    mode: "0750"
+  loop:
+    - "{{ host_runner_dir }}"
+    - "{{ host_runner_dir }}/data"
+    - "{{ host_runner_dir }}/work"
+
+- name: Download the runner binary
+  get_url:
+    url: "https://code.forgejo.org/forgejo/runner/releases/download/v{{ host_runner_version }}/forgejo-runner-{{ host_runner_version }}-linux-amd64"
+    dest: "/usr/local/bin/forgejo-runner-{{ host_runner_version }}"
+    checksum: "sha256:{{ host_runner_sha256 }}"
+    mode: "0755"
+
+- name: Point forgejo-runner at the pinned version
+  file:
+    src: "/usr/local/bin/forgejo-runner-{{ host_runner_version }}"
+    dest: /usr/local/bin/forgejo-runner
+    state: link
+    force: true
+
+- name: Template runner configuration
+  template:
+    src: config.yaml.j2
+    dest: "{{ host_runner_dir }}/data/config.yaml"
+    owner: "{{ host_runner_user }}"
+    group: "{{ host_runner_user }}"
+    mode: "0644"
+  register: host_runner_config
+
+- name: Check if the runner is registered
+  stat:
+    path: "{{ host_runner_dir }}/data/.runner"
+  register: host_runner_registered
+
+- name: Register runner
+  command: >-
+    runuser -u {{ host_runner_user }} -- /usr/local/bin/forgejo-runner register --no-interactive
+    --instance {{ forgejo_url }}
+    --token {{ forgejo_registration_token }}
+    --name {{ host_runner_name }}
+    --labels {{ host_runner_labels | join(',') }}
+    --config {{ host_runner_dir }}/data/config.yaml
+  args:
+    chdir: "{{ host_runner_dir }}"
+  when: not host_runner_registered.stat.exists
+  no_log: true
+
+- name: Install the runner service
+  template:
+    src: forgejo-runner-host.service.j2
+    dest: /etc/systemd/system/forgejo-runner-host.service
+    mode: "0644"
+  register: host_runner_unit
+
+- name: Reload systemd
+  systemd:
+    daemon_reload: true
+  when: host_runner_unit.changed
+
+- name: Disable the legacy forgejo-runner service
+  systemd:
+    name: forgejo-runner
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Enable and start the runner
+  systemd:
+    name: forgejo-runner-host
+    state: "{{ 'restarted' if host_runner_config.changed or host_runner_unit.changed else 'started' }}"
+    enabled: true
+
+- name: Prune docker weekly
+  cron:
+    name: "prune host runner docker"
+    weekday: "0"
+    hour: "3"
+    minute: "0"
+    job: "docker image prune -af --filter until=168h >/dev/null 2>&1; docker builder prune -af --filter until=168h >/dev/null 2>&1"
+
+- name: Clean old job workspaces nightly
+  cron:
+    name: "clean host runner workspaces"
+    hour: "4"
+    minute: "30"
+    job: "find {{ host_runner_dir }}/work -mindepth 1 -maxdepth 3 -mtime +2 -exec rm -rf {} + >/dev/null 2>&1"

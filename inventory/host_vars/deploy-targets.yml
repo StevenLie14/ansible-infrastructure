@@ -1,0 +1,152 @@
+# Apps each deploy target runs, and which repo key may deploy which app.
+#
+# name           app name used by CI ("deploy <name> <sha>") and by deploy.sh
+# project        compose project; defaults to name. Keep it equal to the old
+#                `docker compose -p` value so existing containers and volumes
+#                are adopted instead of recreated next to them.
+# vault_path     KV path with the app's runtime config (kv/data/<forgejo repo>[-suffix])
+# allowed_binds  host paths outside /srv/deploy/<name>/data a bind mount may use
+# rollout_service  set to replace that service with zero downtime (needs Traefik
+#                labels and a drain-aware healthcheck, see docs/ci-cd.md)
+#
+# Each host's Vault AppRole credentials are read from keys/vault/deploy-<host>.*,
+# written by the vault-approle role. Keys come from scripts/gen-deploy-keys.sh.
+
+deploy_vault_cred_dir: "/workdir/keys/vault"
+
+deploy_targets:
+  docker-apps:
+    apps:
+      # auto-testhit keeps its config outside kv/data/auto-testhit
+      # (repo secrets VAULT_PATH_ADMIN / VAULT_PATH_SERVER).
+      - { name: testhit-admin, vault_path: kv/data/testhit-admin }
+      - { name: testhit-server, vault_path: kv/data/testhit-server }
+      - { name: bluejack-extension-be, vault_path: kv/data/bluejack-extension-be }
+      - { name: line-bot, vault_path: kv/data/line-bot }
+      # Forgejo repo slc-rdt/sonar-fe (on GitHub: new-register-nar)
+      - { name: sonar-fe, vault_path: kv/data/sonar-fe }
+      - { name: sonar-be, vault_path: kv/data/sonar-be }
+      - { name: svtp, vault_path: kv/data/svtp }
+      - { name: atlas-be, vault_path: kv/data/atlas-be }
+      - { name: atlas-fe, vault_path: kv/data/atlas-fe }
+      - { name: chronus-be, vault_path: kv/data/chronus-be }
+      - { name: chronus-fe, vault_path: kv/data/chronus-fe }
+      - { name: galaxion-fe-global, vault_path: kv/data/galaxion-fe-global }
+      - { name: galaxion-fe-local, vault_path: kv/data/galaxion-fe-local }
+      - { name: docflow-be, vault_path: kv/data/docflow-be }
+      - { name: docflow-fe, vault_path: kv/data/docflow-fe }
+      - { name: lunar-be, vault_path: kv/data/lunar-be }
+      - { name: lunar-lcas-be, vault_path: kv/data/lunar-be-lcas }
+      - { name: lunar-fe, vault_path: kv/data/lunar-fe }
+      - { name: lunar-lcas-fe, vault_path: kv/data/lunar-fe-lcas }
+      - { name: bplustraining, vault_path: kv/data/bplustraining }
+      - { name: bplustraining-lcas, vault_path: kv/data/bplustraining-lcas }
+      - { name: nar-fe, vault_path: kv/data/nar-fe }
+      - { name: nar-lcas-fe, vault_path: kv/data/nar-fe-lcas }
+      - { name: narwal-be, vault_path: kv/data/narwal-be }
+      - { name: narwal-lcas-be, vault_path: kv/data/narwal-be-lcas }
+      - { name: narwal-fe, vault_path: kv/data/narwal-fe }
+      - { name: narwal-lcas-fe, vault_path: kv/data/narwal-fe-lcas }
+      - { name: new-attendance-management-be, vault_path: kv/data/new-attendance-management-be }
+      - { name: new-attendance-management-fe, vault_path: kv/data/new-attendance-management-fe }
+      - { name: plagion-ai, vault_path: kv/data/plagion-ai }
+      - { name: plagion-be, vault_path: kv/data/plagion-be }
+      - { name: plagion-fe, vault_path: kv/data/plagion-fe }
+      - { name: qman-be, vault_path: kv/data/qman-be }
+      - { name: qman-fe, vault_path: kv/data/qman-fe }
+      # Uploaded files still live in the old runner's home. Move them to
+      # /srv/deploy/request-slc-be/data/wwwroot and drop this allowance when convenient.
+      - name: request-slc-be
+        vault_path: kv/data/request-slc-be
+        allowed_binds: [/home/github-runner/actions-runner/assets/request-slc]
+      - name: request-slc-fe
+        vault_path: kv/data/request-slc-fe
+        allowed_binds: [/usr/local/share/ca-certificates/slc.crt]
+      - { name: resman-be, vault_path: kv/data/resman-be }
+      - { name: resman-fe, vault_path: kv/data/resman-fe }
+      - { name: room-borrowing-anggrek-be, vault_path: kv/data/room-borrowing-anggrek-be }
+      - { name: room-borrowing-anggrek-fe, vault_path: kv/data/room-borrowing-anggrek-fe }
+      - { name: room-checklist-be, vault_path: kv/data/room-checklist-be }
+      - { name: room-checklist-fe, vault_path: kv/data/room-checklist-fe }
+      - { name: monitoring, vault_path: kv/data/monitoring }
+      - { name: prisma-mirror, vault_path: kv/data/prisma-mirror }
+      - { name: lunar-forecaster, vault_path: kv/data/lunar-forecaster }
+    repo_keys:
+      - { repo: auto-testhit, apps: [testhit-admin, testhit-server] }
+      - { repo: bluejack-extension-be, apps: [bluejack-extension-be] }
+      - { repo: line-bot, apps: [line-bot] }
+      - { repo: sonar-fe, apps: [sonar-fe] }
+      - { repo: sonar-be, apps: [sonar-be] }
+      - { repo: svtp, apps: [svtp] }
+      - { repo: atlas-be, apps: [atlas-be] }
+      - { repo: atlas-fe, apps: [atlas-fe] }
+      - { repo: chronus-be, apps: [chronus-be] }
+      - { repo: chronus-fe, apps: [chronus-fe] }
+      - { repo: galaxion-fe, apps: [galaxion-fe-global, galaxion-fe-local] }
+      - { repo: docflow-be, apps: [docflow-be] }
+      - { repo: docflow-fe, apps: [docflow-fe] }
+      - { repo: lunar-be, apps: [lunar-be, lunar-lcas-be] }
+      - { repo: lunar-fe, apps: [lunar-fe, lunar-lcas-fe] }
+      - { repo: bplustraining-branch, apps: [bplustraining, bplustraining-lcas] }
+      - { repo: new-assistant-recruitment, apps: [nar-fe, nar-lcas-fe] }
+      - { repo: narwal-be, apps: [narwal-be, narwal-lcas-be] }
+      - { repo: narwal-fe, apps: [narwal-fe, narwal-lcas-fe] }
+      - { repo: new-attendance-management-be, apps: [new-attendance-management-be] }
+      - { repo: new-attendance-management-fe, apps: [new-attendance-management-fe] }
+      - { repo: plagion-ai, apps: [plagion-ai] }
+      - { repo: plagion-be, apps: [plagion-be] }
+      - { repo: plagion-fe, apps: [plagion-fe] }
+      - { repo: qman-be, apps: [qman-be] }
+      - { repo: qman-fe, apps: [qman-fe] }
+      - { repo: request-slc-be, apps: [request-slc-be] }
+      - { repo: request-slc-fe, apps: [request-slc-fe] }
+      - { repo: resman-be, apps: [resman-be] }
+      - { repo: resman-fe, apps: [resman-fe] }
+      - { repo: room-borrowing-anggrek-be, apps: [room-borrowing-anggrek-be] }
+      - { repo: room-borrowing-anggrek-fe, apps: [room-borrowing-anggrek-fe] }
+      - { repo: room-checklist-be, apps: [room-checklist-be] }
+      - { repo: room-checklist-fe, apps: [room-checklist-fe] }
+      - { repo: monitoring, apps: [monitoring] }
+      - { repo: prisma-mirror, apps: [prisma-mirror] }
+      - { repo: lunar-forecaster, apps: [lunar-forecaster] }
+    jump:
+      allowed_from:
+        - "{{ lookup('env', 'CI_RUNNER_HOST') }}"
+        - "10.200.38.0/24"
+      permit_open:
+        - "{{ lookup('env', 'DEPLOY_HOST_SYAHDAN') }}:22"
+
+  galaxion:
+    apps:
+      # Used to run as the systemd user service galaxion-server on port 5000.
+      # Stop and disable it before the first deploy so the container can bind the port.
+      - { name: galaxion, vault_path: kv/data/galaxion }
+      - { name: lab-local, vault_path: kv/data/lab-slc-v2-local }
+      - { name: bimay-prk-local, vault_path: kv/data/bimay-prk-local }
+    repo_keys:
+      - { repo: galaxion, apps: [galaxion] }
+      - { repo: lab-slc-v2, apps: [lab-local] }
+      - { repo: all-new-binusmaya-frontend, apps: [bimay-prk-local] }
+
+  syahdan:
+    apps:
+      - { name: bimay-prk-global, vault_path: kv/data/bimay-prk-global }
+      - { name: bee-chase-admin, vault_path: kv/data/bee-chase-admin }
+      - { name: bee-chase-api, vault_path: kv/data/bee-chase-api, wait_timeout: 300 }
+      - { name: bee-chase-client, vault_path: kv/data/bee-chase-client }
+    repo_keys:
+      - { repo: all-new-binusmaya-frontend, apps: [bimay-prk-global] }
+      - { repo: bee-chase-admin, apps: [bee-chase-admin] }
+      - { repo: bee-chase-api, apps: [bee-chase-api] }
+      - { repo: bee-chase-client, apps: [bee-chase-client] }
+
+  weblinux:
+    apps:
+      - { name: ba-test, vault_path: kv/data/ba-test }
+      - { name: ba-test-external, vault_path: kv/data/ba-test-external }
+      - name: naroj
+        vault_path: kv/data/naroj
+        allowed_binds: [/run/mysqld]
+    repo_keys:
+      - { repo: ba-test, apps: [ba-test, ba-test-external] }
+      - { repo: naroj, apps: [naroj] }

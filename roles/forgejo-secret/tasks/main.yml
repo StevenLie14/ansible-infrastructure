@@ -19,15 +19,19 @@
 - name: Initialize repository list
   set_fact:
     list_of_repo_names: []
+    selected_repos: >-
+      {{ (target_repos | default([])) + ([target_repo] if (target_repo | default('') | trim | length > 0) else []) }}
 
 - name: Fetch repository pages from Forgejo
   ansible.builtin.uri:
     url: "{{ forgejo_url }}/api/v1/orgs/{{ forgejo_org_name }}/repos?page={{ item }}&limit=100"
     method: GET
+    validate_certs: "{{ forgejo_validate_certs }}"
     headers:
       Authorization: "token {{ forgejo_token }}"
   loop: "{{ range(1, 3) | list }}"
   register: repo_pages
+  when: selected_repos | length == 0
 
 - name: Combine repository names (lowercased)
   set_fact:
@@ -43,9 +47,34 @@
         | map('lower')
         | list
       }}
+  when: selected_repos | length == 0
+
+- name: Use explicitly targeted repositories
+  set_fact:
+    list_of_repo_names: "{{ selected_repos | map('lower') | list }}"
+  when: selected_repos | length > 0
 
 - name: Inject Secrets into each Forgejo Repository
   include_tasks: "/workdir/roles/forgejo-secret/tasks/set_forgejo_repo_secrets.yml"
   loop: "{{ list_of_repo_names }}"
   loop_control:
     loop_var: current_repo
+
+# Values every repo shares (deploy hosts, their SSH host keys, the Vault CA)
+# live once at org level instead of being copied into each repo.
+- name: Set organization secrets
+  ansible.builtin.uri:
+    url: "{{ forgejo_url }}/api/v1/orgs/{{ forgejo_org_name }}/actions/secrets/{{ item.name }}"
+    method: PUT
+    validate_certs: "{{ forgejo_validate_certs }}"
+    status_code: [201, 204]
+    body_format: json
+    body:
+      data: "{{ item.value }}"
+    headers:
+      Authorization: "token {{ forgejo_token }}"
+      Content-Type: "application/json"
+  loop: "{{ org_secrets | default([]) | selectattr('value') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true

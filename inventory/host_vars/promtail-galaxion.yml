@@ -1,0 +1,5 @@
+promtail_project: "promtail-nginx"
+promtail_service: "promtail-nginx"
+promtail_config_file: "promtail-nginx.yaml"
+promtail_mounts:
+  - /var/log/nginx:/var/log/nginx:ro

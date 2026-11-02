@@ -1,0 +1,130 @@
+- name: Check old site config
+  stat:
+    path: /etc/nginx/sites-available/{{ site.old }}.conf
+  register: old_conf
+
+- name: Check new site certificate
+  stat:
+    path: /etc/letsencrypt/live/{{ site.new }}/fullchain.pem
+  register: new_cert
+
+- name: Migrate {{ site.old }} to {{ site.new }}
+  when: old_conf.stat.exists
+  block:
+    - name: Read old site config
+      slurp:
+        src: /etc/nginx/sites-available/{{ site.old }}.conf
+      register: old_conf_content
+
+    - name: Deploy temporary HTTP-only config for certificate issuance
+      copy:
+        dest: /etc/nginx/sites-available/{{ site.new }}.conf
+        content: |
+          server {
+              listen 80;
+              server_name {{ site.new }};
+          }
+        owner: root
+        group: root
+        mode: '0644'
+      when: not new_cert.stat.exists
+
+    - name: Enable temporary config
+      file:
+        src: /etc/nginx/sites-available/{{ site.new }}.conf
+        dest: /etc/nginx/sites-enabled/{{ site.new }}.conf
+        state: link
+      when: not new_cert.stat.exists
+
+    - name: Test and reload Nginx for certificate issuance
+      shell: nginx -t && systemctl reload nginx
+      changed_when: false
+      when: not new_cert.stat.exists
+
+    - name: Issue certificate for {{ site.new }}
+      command: >
+        certbot certonly --nginx
+        -d {{ site.new }}
+        --non-interactive
+        --agree-tos
+        -m {{ certbot_admin_email }}
+      when: not new_cert.stat.exists
+
+    - name: Deploy final config for {{ site.new }} (old config with domain replaced)
+      copy:
+        dest: /etc/nginx/sites-available/{{ site.new }}.conf
+        content: "{{ old_conf_content.content | b64decode | replace(site.old, site.new) }}"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Enable final config
+      file:
+        src: /etc/nginx/sites-available/{{ site.new }}.conf
+        dest: /etc/nginx/sites-enabled/{{ site.new }}.conf
+        state: link
+
+    - name: Test Nginx configuration
+      command: nginx -t
+      changed_when: false
+
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded
+
+  rescue:
+    - name: Roll back, keep old site {{ site.old }} serving
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/nginx/sites-enabled/{{ site.new }}.conf
+        - /etc/nginx/sites-available/{{ site.new }}.conf
+
+    - name: Reload Nginx after rollback
+      service:
+        name: nginx
+        state: reloaded
+
+    - name: Fail with context
+      fail:
+        msg: "Migration of {{ site.old }} failed and was rolled back. The old site is untouched."
+
+- name: Remove old site (symlink and config)
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/nginx/sites-enabled/{{ site.old }}.conf
+    - /etc/nginx/sites-available/{{ site.old }}.conf
+  when: old_conf.stat.exists
+
+- name: Delete old SSL certificate
+  command: certbot delete --cert-name {{ site.old }} --non-interactive
+  register: old_cert_delete
+  changed_when: "'Deleted all files' in old_cert_delete.stdout"
+  failed_when: old_cert_delete.rc != 0 and 'No certificate found' not in old_cert_delete.stdout and 'No certificate found' not in old_cert_delete.stderr
+  when: old_conf.stat.exists
+
+- name: Find old site logs
+  find:
+    paths: /var/log/nginx
+    patterns: "{{ site.old }}_*"
+  register: old_site_logs
+  when: old_conf.stat.exists
+
+- name: Remove old site logs
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ old_site_logs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: old_conf.stat.exists
+
+- name: Reload Nginx after cleanup
+  service:
+    name: nginx
+    state: reloaded
+  when: old_conf.stat.exists

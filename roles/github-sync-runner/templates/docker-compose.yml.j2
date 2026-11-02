@@ -1,0 +1,24 @@
+# GitHub runner whose only job is sync-forgejo.yml: one curl that tells
+# Forgejo to pull a mirror. It gets no Docker socket and cannot sudo, so a
+# workflow that lands here can reach the network and nothing else.
+services:
+  runner:
+    image: "{{ sync_runner_image }}"
+    restart: unless-stopped
+    entrypoint: ["/entrypoint.sh"]
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 512m
+    environment:
+      RUNNER_URL: "{{ sync_runner_url }}"
+      RUNNER_NAME: "{{ sync_runner_name }}"
+      RUNNER_LABELS: "{{ sync_runner_labels | join(',') }}"
+      # Public CAs plus the SLC root CA, for github.com and forgejo.slc.net.
+      SSL_CERT_FILE: /ca/bundle.pem
+      CURL_CA_BUNDLE: /ca/bundle.pem
+    volumes:
+      - ./entrypoint.sh:/entrypoint.sh:ro
+      - ./state:/state
+      - "{{ sync_runner_ca_bundle }}:/ca/bundle.pem:ro"

@@ -1,0 +1,58 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: https://watch.slc.net/loki/api/v1/push 
+
+scrape_configs:
+  - job_name: docker_logs_server_apps
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'container'
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: 'service_name'
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        target_label: 'compose_project'
+      - source_labels: ['__meta_docker_container_log_stream']
+        target_label: 'stream'
+      - target_label: 'server_origin'
+        replacement: 'server-191'
+    pipeline_stages:
+      - multiline:
+          firstline: '^\S'
+          max_wait_time: 3s
+      - regex:
+          expression: '(?i)\b(?P<level>trace|debug|info|warn|warning|error|fatal|critical)\b'
+      - json:
+          expressions:
+            level: 'level || Level || severity || "@l"'
+      - regex:
+          expression: '(?i)\blevel=(?P<level>\w+)'
+      - regex:
+          expression: '\b(?P<level>VRB|DBG|INF|WRN|ERR|FTL)\]'
+      - regex:
+          expression: '^(?P<level>trce|dbug|info|warn|fail|crit):'
+      - template:
+          source: level
+          template: >-
+            {{- if .Value -}}
+            {{- $l := ToLower .Value -}}
+            {{- if or (eq $l "trce") (eq $l "vrb") (eq $l "verbose") -}}trace
+            {{- else if or (eq $l "dbug") (eq $l "dbg") -}}debug
+            {{- else if or (eq $l "inf") (eq $l "information") -}}info
+            {{- else if or (eq $l "wrn") (eq $l "warning") -}}warn
+            {{- else if or (eq $l "fail") (eq $l "err") -}}error
+            {{- else if or (eq $l "crit") (eq $l "ftl") (eq $l "fatal") -}}critical
+            {{- else -}}{{ $l }}{{- end -}}
+            {{- end -}}
+      - labels:
+          level:

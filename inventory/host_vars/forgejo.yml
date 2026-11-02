@@ -1,4 +1,6 @@
-forgejo_version: "14.0.2"
+forgejo_version: "17.0.0"
+forgejo_http_port: 3500
+forgejo_ssh_port: 2222
 dest_path: "/home/rnd/forgejo"
 
 forgejo_db_type: "{{ lookup('env', 'FORGEJO_DB_TYPE') }}"

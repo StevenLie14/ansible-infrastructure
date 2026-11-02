@@ -1,5 +1,14 @@
-domain_name: "neo.stevenlie.my.id"
+domain_name: "neo.stevenlie.site"
+old_domain_name: "neo.stevenlie.my.id"
 frontend_port: 7474
 has_backend: false
 backend_port: 5000
 certbot_admin_email: "{{ lookup('env', 'CERTBOT_ADMIN_EMAIL') }}"
+nginx_migrate_sites:
+  - { old: "bluejack.stevenlie.my.id", new: "bluejack.stevenlie.site" }
+  - { old: "cancer.stevenlie.my.id", new: "cancer.stevenlie.site" }
+  - { old: "n8n.stevenlie.my.id", new: "n8n.stevenlie.site" }
+  - { old: "obesity.stevenlie.my.id", new: "obesity.stevenlie.site" }
+  - { old: "registry.stevenlie.my.id", new: "registry.stevenlie.site" }
+  - { old: "vault.stevenlie.my.id", new: "vault.stevenlie.site" }
+  - { old: "wph1.stevenlie.my.id", new: "wph1.stevenlie.site" }

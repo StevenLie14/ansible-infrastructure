@@ -1,0 +1,7 @@
+# Managed by Ansible (deploy-target role). Read by /opt/deploy/bin/deploy.sh.
+PROJECT={{ item.project | default(item.name) }}
+VAULT_PATH={{ item.vault_path }}
+ALLOWED_BINDS="{{ item.allowed_binds | default([]) | join(' ') }}"
+ROLLOUT_SERVICE={{ item.rollout_service | default('') }}
+DRAIN_SECONDS={{ item.drain_seconds | default(10) }}
+WAIT_TIMEOUT={{ item.wait_timeout | default(180) }}

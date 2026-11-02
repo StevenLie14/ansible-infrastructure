@@ -1,0 +1,31 @@
+# Repos whose workflows read build-time values from Vault. Each gets its own
+# AppRole that can read kv/data/<repo> and its -global/-local/-lcas siblings.
+vault_ci_repos:
+  - name: auto-testhit
+    # testhit-admin's build reads VITE_SERVER_URL from secrets.VAULT_PATH_ADMIN.
+    # Nothing lives under kv/data/auto-testhit, so this is its only path.
+    paths: [kv/data/testhit-admin]
+  - name: lab-slc-v2
+  - name: sonar-fe            # GitHub: new-register-nar
+  # prk keeps its config under bimay-prk-*, not the repo name; its workflows
+  # name these paths directly instead of using VAULT_PATH.
+  - name: all-new-binusmaya-frontend
+    paths: [kv/data/bimay-prk-global, kv/data/bimay-prk-local]
+  - name: atlas-fe
+  - name: chronus-fe
+  # Galaxion's facade tests run against the real assistant DB servers. CI may
+  # read only the test credentials, never kv/data/galaxion (production config).
+  - name: galaxion
+    paths: [kv/data/galaxion-test]
+  - name: galaxion-fe
+  - name: docflow-fe
+  - name: lunar-fe
+  - name: narwal-fe
+  - name: plagion-fe
+  - name: qman-fe
+  - name: request-slc-fe
+  - name: resman-fe
+  - name: room-borrowing-anggrek-fe
+  - name: room-checklist-fe
+  - name: bee-chase-admin
+  - name: bee-chase-client

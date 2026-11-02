@@ -1,0 +1,54 @@
+server:
+  http_listen_port: 9081
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions-nginx.yaml
+
+clients:
+  - url: https://watch.slc.net/loki/api/v1/push
+
+scrape_configs:
+  - job_name: nginx_logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: nginx
+          host: galaxion
+          log_type: access
+          __path__: /var/log/nginx/*_access.log
+      - targets:
+          - localhost
+        labels:
+          job: nginx
+          host: galaxion
+          log_type: error
+          __path__: /var/log/nginx/*_error.log
+    pipeline_stages:
+      - regex:
+          source: filename
+          expression: '/var/log/nginx/(?P<app>\w+?)_(access|error)\.log'
+      - labels:
+          app:
+      - match:
+          selector: '{log_type="access"}'
+          stages:
+            - regex:
+                expression: '^(?P<remote_addr>\S+) - (?P<remote_user>\S+) \[(?P<time_local>[^\]]+)\] "(?P<method>\S+) (?P<path>\S+) (?P<http_version>\S+)" (?P<status>\d+) (?P<body_bytes_sent>\d+) "(?P<referer>[^"]*)" "(?P<user_agent>[^"]*)"'
+            - labels:
+                status:
+                method:
+            - timestamp:
+                source: time_local
+                format: '02/Jan/2006:15:04:05 -0700'
+      - match:
+          selector: '{log_type="error"}'
+          stages:
+            - regex:
+                expression: '^(?P<time_local>\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}) \[(?P<level>\w+)\] (?P<pid_tid>[^:]+): (?P<message>.*)$'
+            - labels:
+                level:
+            - timestamp:
+                source: time_local
+                format: '2006/01/02 15:04:05'

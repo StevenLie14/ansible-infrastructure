@@ -1,0 +1,56 @@
+- name: Read enabled auth methods
+  uri:
+    url: "{{ vault_addr }}/v1/sys/auth"
+    headers: { X-Vault-Token: "{{ vault_admin_token }}" }
+    ca_path: "{{ vault_ca_file }}"
+  register: vault_auth
+  no_log: true
+
+- name: Enable AppRole auth
+  uri:
+    url: "{{ vault_addr }}/v1/sys/auth/approle"
+    method: POST
+    body_format: json
+    body: { type: approle }
+    headers: { X-Vault-Token: "{{ vault_admin_token }}" }
+    ca_path: "{{ vault_ca_file }}"
+    status_code: [200, 204]
+  when: "'approle/' not in vault_auth.json.data"
+  no_log: true
+
+- name: Create credential directory
+  file:
+    path: "{{ vault_cred_dir }}"
+    state: directory
+    mode: "0700"
+
+# One AppRole per repo that reads build-time values (VITE_*, NEXT_PUBLIC_*),
+# limited to that repo's own KV entries. Replaces the shared userpass login.
+- name: Create CI AppRoles and push their credentials to Forgejo
+  include_tasks: approle.yml
+  vars:
+    approle_name: "ci-{{ repo.name }}"
+    # `paths` replaces the default kv/data/<repo>* set, for repos whose CI must
+    # not see the app's runtime secrets (e.g. Galaxion's test credentials).
+    approle_paths: >-
+      {{ (repo.paths | default(vault_path_suffixes | map('regex_replace', '^', vault_kv_mount + '/data/' + repo.name) | list))
+         + (repo.extra_paths | default([])) }}
+    approle_cidrs: "{{ vault_ci_bound_cidrs }}"
+    forgejo_repo: "{{ repo.name }}"
+  loop: "{{ vault_ci_repos }}"
+  loop_control:
+    loop_var: repo
+    label: "{{ repo.name }}"
+
+# One AppRole per deploy host, reading only the apps that host runs.
+- name: Create deploy target AppRoles
+  include_tasks: approle.yml
+  vars:
+    approle_name: "deploy-{{ host.key }}"
+    approle_paths: "{{ host.value.apps | map(attribute='vault_path') | reject('search', 'TODO') | list }}"
+    approle_cidrs: "{{ vault_deploy_bound_cidrs[host.key] | default([]) }}"
+    forgejo_repo: ""
+  loop: "{{ deploy_targets | dict2items }}"
+  loop_control:
+    loop_var: host
+    label: "{{ host.key }}"

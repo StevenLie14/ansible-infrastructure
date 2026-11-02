@@ -1,0 +1,23 @@
+deploy_user: "deploy"
+deploy_jump_user: "jump"
+deploy_home: "/home/{{ deploy_user }}"
+deploy_state_root: "/srv/deploy"
+
+# Where gen-deploy-keys.sh writes one keypair per repo (keys/ is gitignored).
+deploy_key_dir: "/workdir/keys/deploy"
+# Written by the vault-approle role: deploy-<inventory host>.role_id / .secret_id
+deploy_vault_cred_dir: "/workdir/keys/vault"
+
+deploy_registry_url: "{{ lookup('env', 'REGISTRY_URL') }}"
+# Pull-only robot account. Never reuse the push account CI uses.
+deploy_registry_username: "{{ lookup('env', 'DEPLOY_REGISTRY_USERNAME') }}"
+deploy_registry_password: "{{ lookup('env', 'DEPLOY_REGISTRY_PASSWORD') }}"
+
+deploy_vault_addr: "{{ lookup('env', 'VAULT_URL') }}"
+# Local path of the CA that signed Vault's certificate.
+deploy_vault_ca_file: "/workdir/keys/vault-ca.pem"
+
+# docker-rollout replaces a service without downtime when an app sets
+# rollout_service. Pinned by checksum so a moved tag cannot slip in other code.
+deploy_rollout_version: "v0.14"
+deploy_rollout_sha256: "cdeaba6ae9eee3b0b606286e585bbda6787283d801a6ad6d9b9d2bc347fda05b"

@@ -1,0 +1,9 @@
+runner_name: "ci-2"
+runner_capacity: 2
+runner_dind_dns:
+  - "10.22.64.21"
+  - "10.22.64.131"
+runner_dind_mem_limit: "8g"
+runner_dind_cpus: "6"
+runner_extra_labels:
+  - "ci-large:docker://ghcr.io/catthehacker/ubuntu:act-22.04@sha256:f5f5c29208c4fd541704fe7b8df33d3bf620ce4ac46f36853b7abeb0159705c4"

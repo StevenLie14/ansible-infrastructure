@@ -1,0 +1,48 @@
+services:
+  socket-proxy:
+    image: {{ traefik_socket_proxy_image }}
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      NETWORKS: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [socket]
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }
+
+  traefik:
+    image: {{ traefik_image }}
+    restart: unless-stopped
+    depends_on: [socket-proxy]
+    command:
+      - --providers.docker.endpoint=tcp://socket-proxy:2375
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network={{ traefik_proxy_network }}
+      - --entrypoints.web.address=:{{ traefik_web_port }}
+      - --ping=true
+      - --accesslog=true
+      - --log.level=INFO
+    ports:
+      - "{{ traefik_web_bind }}:{{ traefik_web_port }}:{{ traefik_web_port }}"
+    networks: [socket, {{ traefik_proxy_network }}]
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    mem_limit: {{ traefik_mem_limit }}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: json-file
+      options: { max-size: 10m, max-file: "3" }
+
+networks:
+  socket:
+    internal: true
+  {{ traefik_proxy_network }}:
+    name: {{ traefik_proxy_network }}

@@ -17,7 +17,9 @@ The playbook (`playbook.yml`) manages the following via tags:
 | `harbor` | Deploy **Harbor** private container registry |
 | `forgejo` | Deploy **Forgejo** (self-hosted Git service) via Docker Compose |
 | `forgejo-secret` | Inject **Forgejo repository-level secrets** |
-| `forgejo-runner` | Register a **Forgejo Actions runner** on a remote host |
+| `forgejo-runner` | Run the **Forgejo Actions runner** (containerised, own docker-in-docker) on the `ci-runner` host |
+| `vault-approle` | Create per-repo and per-host **Vault AppRoles** and push their credentials |
+| `deploy-target` | Prepare a host for **SSH deploys from CI** (forced-command `deploy.sh`) |
 | `forgejo-mirror` | Configure **repository mirroring** in Forgejo |
 | `nginx` | Deploy an **Nginx reverse proxy** with automatic SSL via Certbot |
 
@@ -201,3 +203,9 @@ Then restart Harbor:
 docker-compose down -v
 docker-compose up -d
 ```
+
+---
+
+## CI/CD
+
+How builds and deploys work, and the rollout order for the hardened setup: [docs/ci-cd.md](docs/ci-cd.md) (Bahasa Indonesia, berisi checklist rollout) atau [docs/ci-cd.en.md](docs/ci-cd.en.md) (English).

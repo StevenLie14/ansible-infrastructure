@@ -1,0 +1,25 @@
+vault_addr: "{{ lookup('env', 'VAULT_URL') }}"
+# Token allowed to write policies and AppRoles. Use it for this run only.
+vault_admin_token: "{{ lookup('env', 'VAULT_ADMIN_TOKEN') }}"
+vault_ca_file: "/workdir/keys/vault-ca.pem"
+vault_kv_mount: "kv"
+
+forgejo_url: "{{ lookup('env', 'FORGEJO_URL') }}"
+forgejo_org_name: "{{ lookup('env', 'FORGEJO_ORG_NAME') }}"
+forgejo_token: "{{ lookup('env', 'FORGEJO_TOKEN') }}"
+forgejo_validate_certs: "{{ (lookup('env', 'FORGEJO_VALIDATE_CERTS') | default('true', true)) | bool }}"
+
+# Where deploy target credentials are written for the deploy-target role.
+vault_cred_dir: "/workdir/keys/vault"
+
+# Source addresses a secret_id may be used from. Fill these in: a leaked
+# secret_id is then useless outside the CI runner or the deploy host.
+vault_ci_bound_cidrs: []
+vault_deploy_bound_cidrs: {}
+#   docker-apps: ["10.0.0.10/32"]
+
+vault_token_ttl: "15m"
+vault_token_max_ttl: "30m"
+
+# Suffixes the workflows append to VAULT_PATH (main, -global, -local, -lcas).
+vault_path_suffixes: ["", "-global", "-local", "-lcas"]

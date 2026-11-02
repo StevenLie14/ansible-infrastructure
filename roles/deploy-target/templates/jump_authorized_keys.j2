@@ -1,0 +1,1 @@
+from="{{ target.jump.allowed_from | join(',') }}",restrict,port-forwarding,{% for dest in target.jump.permit_open %}permitopen="{{ dest }}"{% if not loop.last %},{% endif %}{% endfor %} {{ lookup('file', deploy_key_dir + '/' + deploy_jump_user + '.pub') | trim }}

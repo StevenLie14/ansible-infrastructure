@@ -1,0 +1,8 @@
+- name: Install nginx logrotate policy that reopens logs with USR1
+  template:
+    src: nginx.logrotate.j2
+    dest: /etc/logrotate.d/nginx
+    owner: root
+    group: root
+    mode: "0644"
+    validate: logrotate -d %s

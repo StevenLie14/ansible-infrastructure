@@ -1,0 +1,8 @@
+traefik_dir: /opt/traefik
+traefik_project: traefik
+traefik_image: traefik:v3.7.17
+traefik_socket_proxy_image: tecnativa/docker-socket-proxy:0.3.0
+traefik_web_bind: 127.0.0.1
+traefik_web_port: 8081
+traefik_proxy_network: proxy
+traefik_mem_limit: 256m

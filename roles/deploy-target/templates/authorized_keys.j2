@@ -1,0 +1,5 @@
+# Managed by Ansible (deploy-target role). Every key can only run deploy.sh,
+# and only for the apps listed after it.
+{% for key in target.repo_keys %}
+command="/opt/deploy/bin/deploy.sh {{ key.apps | join(' ') }}",restrict {{ lookup('file', deploy_key_dir + '/' + key.repo + '.pub') | trim }}
+{% endfor %}

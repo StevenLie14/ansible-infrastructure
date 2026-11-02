@@ -1,0 +1,57 @@
+# Forgejo runner with its own Docker daemon (docker-in-docker), following the
+# layout of Forgejo's runner examples. Nothing here mounts the host's
+# /var/run/docker.sock: job containers are created inside "docker" below.
+services:
+  docker:
+    image: "{{ runner_dind_image }}"
+    hostname: docker
+    # dind needs privileged to run its own daemon. That is the price of
+    # building images; keep this stack on a machine that runs nothing else.
+    privileged: true
+    restart: unless-stopped
+{% if runner_dind_mem_limit %}
+    mem_limit: {{ runner_dind_mem_limit }}
+{% endif %}
+{% if runner_dind_cpus %}
+    cpus: {{ runner_dind_cpus }}
+{% endif %}
+    environment:
+      DOCKER_TLS_CERTDIR: /certs
+{% set dind_args = runner_dind_dns | map('regex_replace', '^', '--dns=') | list + runner_dind_extra_args %}
+{% if dind_args %}
+    # Containers started inside dind (build steps) cannot use dind's own
+    # 127.0.0.11 resolver and would fall back to 8.8.8.8, which knows nothing
+    # about internal names like *.slc.net.
+    command: {{ dind_args | to_json }}
+{% endif %}
+    volumes:
+      - certs:/certs
+      - dind-data:/var/lib/docker
+      # The SLC root CA: lets dind pull from and push to the internal registry,
+      # and is handed on to job containers (see config.yaml).
+      - ./ca:/ca:ro
+      - ./ca/slc-root-ca.crt:/etc/docker/certs.d/{{ runner_registry_host }}/ca.crt:ro
+
+  runner:
+    image: "{{ runner_image }}"
+    restart: unless-stopped
+    user: "1000:1000"
+    depends_on:
+      - docker
+    environment:
+      DOCKER_HOST: tcp://docker:2376
+      DOCKER_TLS_VERIFY: "1"
+      DOCKER_CERT_PATH: /certs/client
+      # Public CAs plus the SLC root CA, so the runner trusts forgejo.slc.net.
+      # git (used to fetch actions) ignores SSL_CERT_FILE and needs its own.
+      SSL_CERT_FILE: /ca/bundle.pem
+      GIT_SSL_CAINFO: /ca/bundle.pem
+    volumes:
+      - ./data:/data
+      - certs:/certs:ro
+      - ./ca:/ca:ro
+    command: ["forgejo-runner", "daemon", "--config", "/data/config.yaml"]
+
+volumes:
+  certs:
+  dind-data:

@@ -1,78 +1,104 @@
-- name: Ensure runner group exists
-  group:
-    name: "{{ runner_group }}"
-    state: present
-
-- name: Ensure runner user exists
-  user:
-    name: "{{ runner_user }}"
-    group: "{{ runner_group }}"
-    home: "{{ runner_home }}"
-    shell: /bin/bash
-    groups: docker
-    append: yes
-    state: present
-
-- name: Create directory for Forgejo Runner
+- name: Create runner directories
   file:
-    path: "{{ runner_home }}/forgejo-runner"
+    path: "{{ item }}"
     state: directory
-    owner: "{{ runner_user }}"
-    group: "{{ runner_group }}"
-    mode: '0755'
+    owner: "1000"
+    group: "1000"
+    mode: "0750"
+  loop:
+    - "{{ runner_dir }}"
+    - "{{ runner_dir }}/data"
 
-- name: Download Forgejo runner binary
-  get_url:
-    url: "{{ runner_url }}"
-    dest: "{{ runner_home }}/forgejo-runner/forgejo-runner"
-    mode: '0755'
-    owner: "{{ runner_user }}"
-    group: "{{ runner_group }}"
+- name: Create CA directory
+  file:
+    path: "{{ runner_dir }}/ca"
+    state: directory
+    mode: "0755"
+
+- name: Copy the SLC root CA
+  copy:
+    src: "{{ runner_ca_file }}"
+    dest: "{{ runner_dir }}/ca/slc-root-ca.crt"
+    mode: "0644"
+
+# The runner and job containers get one bundle: the host's public CAs plus
+# the SLC root CA, so both github.com and *.slc.net verify.
+- name: Build CA bundle
+  shell: |
+    set -e
+    cat /etc/ssl/certs/ca-certificates.crt ca/slc-root-ca.crt > ca/bundle.pem.new
+    if cmp -s ca/bundle.pem.new ca/bundle.pem; then rm ca/bundle.pem.new; echo same
+    else mv ca/bundle.pem.new ca/bundle.pem; chmod 0644 ca/bundle.pem; echo changed; fi
+  args:
+    chdir: "{{ runner_dir }}"
+  register: ca_bundle
+  changed_when: ca_bundle.stdout == 'changed'
+
+- name: Template docker compose stack
+  template:
+    src: "{{ workdir_compose }}"
+    dest: "{{ runner_dir }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Template runner configuration
+  template:
+    src: "{{ workdir_config }}"
+    dest: "{{ runner_dir }}/data/config.yaml"
+    owner: "1000"
+    group: "1000"
+    mode: "0644"
 
 - name: Check if runner is already registered
   stat:
-    path: "{{ runner_home }}/forgejo-runner/.runner"
+    path: "{{ runner_dir }}/data/.runner"
   register: runner_registered
 
-- name: Template Forgejo Runner configuration
-  template:
-    src: "{{ workdir_config }}"
-    dest: "{{ runner_home }}/forgejo-runner/config.yaml"
-    owner: "{{ runner_user }}"
-    group: "{{ runner_group }}"
-    mode: '0644'
-
-- name: Register Forgejo Runner
-  shell: |
-    ./forgejo-runner register \
-      --instance {{ forgejo_url }} \
-      --token {{ forgejo_registration_token }} \
-      --name {{ runner_name }} \
-      --config config.yaml \
-      --no-interactive
+- name: Start the docker-in-docker daemon
+  command: docker compose up -d docker
   args:
-    chdir: "{{ runner_home }}/forgejo-runner/"
-  become: true
-  become_user: "{{ runner_user }}"
+    chdir: "{{ runner_dir }}"
+  changed_when: false
+
+- name: Register runner
+  command: >-
+    docker compose run --rm runner forgejo-runner register --no-interactive
+    --instance {{ forgejo_url }}
+    --token {{ forgejo_registration_token }}
+    --name {{ runner_name }}
+    --labels {{ runner_labels | join(',') }}
+    --config /data/config.yaml
+  args:
+    chdir: "{{ runner_dir }}"
   when: not runner_registered.stat.exists
+  no_log: true
 
-- name: Create Systemd Service for Forgejo Runner
-  template:
-    src: "{{ workdir_service }}"
-    dest: "{{ runner_service_dest }}"
-    mode: '0644'
-    owner: root
-    group: root
+- name: Start runner
+  command: docker compose up -d
+  args:
+    chdir: "{{ runner_dir }}"
+  register: runner_up
+  changed_when: "'Started' in runner_up.stderr or 'Recreated' in runner_up.stderr"
 
-- name: Start Forgejo Runner service
-  service:
-    name: "{{ runner_service_name }}"
-    state: started
-    enabled: yes
-    daemon_reload: true
-
-- name: Install Node.js for Actions
+# No update_cache: a broken third-party apt repo on the host would fail the
+# whole run, and cron is part of a standard Ubuntu install anyway.
+- name: Ensure cron is installed
   apt:
-    name: nodejs
+    name: cron
     state: present
-    update_cache: yes
+
+# Build cache is capped by size (least recently used goes first) so hot layers
+# survive; tagged images are kept so base images are not pulled again daily.
+- name: Prune docker-in-docker build cache and dangling images daily
+  cron:
+    name: "prune forgejo runner dind"
+    hour: "3"
+    minute: "0"
+    job: "cd {{ runner_dir }} && docker compose exec -T docker sh -c 'docker builder prune -f --keep-storage {{ runner_dind_cache_limit }} && docker image prune -f' >/dev/null 2>&1"
+
+- name: Prune old unused docker-in-docker images monthly
+  cron:
+    name: "prune forgejo runner dind old images"
+    day: "1"
+    hour: "4"
+    minute: "0"
+    job: "cd {{ runner_dir }} && docker compose exec -T docker docker image prune -af --filter until=720h >/dev/null 2>&1"

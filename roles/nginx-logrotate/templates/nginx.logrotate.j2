@@ -1,0 +1,18 @@
+/var/log/nginx/*.log {
+	daily
+	missingok
+	rotate {{ nginx_log_rotate_count }}
+	compress
+	delaycompress
+	notifempty
+	create 0640 www-data adm
+	sharedscripts
+	prerotate
+		if [ -d /etc/logrotate.d/httpd-prerotate ]; then \
+			run-parts /etc/logrotate.d/httpd-prerotate; \
+		fi \
+	endscript
+	postrotate
+		docker kill --signal=USR1 {{ nginx_container_name }} >/dev/null
+	endscript
+}

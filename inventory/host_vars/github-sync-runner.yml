@@ -1,0 +1,12 @@
+sync_runner_url: "https://github.com/slc-rdt"
+sync_runner_token: "{{ lookup('env', 'GITHUB_RUNNER_TOKEN') }}"
+sync_runner_dir: "/opt/github-sync-runner"
+sync_runner_name: "forgejo-sync-1"
+# No default labels (self-hosted, Linux, X64): old deploy workflows still ask
+# for self-hosted and must never land on this runner.
+sync_runner_labels:
+  - forgejo-sync
+
+# Pinned by digest. The runner still updates itself after a GitHub release.
+sync_runner_image: "ghcr.io/actions/actions-runner:2.338.0@sha256:4ffadc0002b2581327e06101fc8c06cd189232baf79fe561fac9caeb76f5e807"
+sync_runner_ca_bundle: "/opt/forgejo-runner/ca/bundle.pem"

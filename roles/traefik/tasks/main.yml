@@ -1,0 +1,25 @@
+- name: Create traefik directory
+  file:
+    path: "{{ traefik_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Template docker compose file
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ traefik_dir }}/docker-compose.yml"
+    mode: "0644"
+  register: traefik_compose
+
+- name: Pull traefik images
+  command: docker compose -p {{ traefik_project }} pull
+  args:
+    chdir: "{{ traefik_dir }}"
+  changed_when: false
+
+- name: Start traefik
+  command: docker compose -p {{ traefik_project }} up -d --remove-orphans {{ '--force-recreate' if traefik_compose.changed else '' }}
+  args:
+    chdir: "{{ traefik_dir }}"
+  register: traefik_up
+  changed_when: "'Started' in traefik_up.stderr or 'Recreated' in traefik_up.stderr or 'Created' in traefik_up.stderr"

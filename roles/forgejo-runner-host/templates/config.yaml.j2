@@ -1,0 +1,17 @@
+log:
+  level: info
+
+runner:
+  file: {{ host_runner_dir }}/data/.runner
+  capacity: {{ host_runner_capacity }}
+  timeout: 3h
+  envs:
+    NODE_EXTRA_CA_CERTS: /usr/local/share/ca-certificates/slc-root-ca.crt
+    GIT_SSL_CAINFO: /etc/ssl/certs/ca-certificates.crt
+  labels: {{ host_runner_labels | to_json }}
+
+cache:
+  enabled: true
+
+host:
+  workdir_parent: {{ host_runner_dir }}/work

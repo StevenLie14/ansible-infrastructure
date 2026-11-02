@@ -1,0 +1,35 @@
+- name: Create promtail directory
+  file:
+    path: "{{ promtail_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Copy promtail configuration
+  copy:
+    src: "{{ promtail_config_file }}"
+    dest: "{{ promtail_dir }}/config.yaml"
+    mode: "0644"
+  register: promtail_config
+
+- name: Template docker compose file
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ promtail_dir }}/docker-compose.yml"
+    mode: "0644"
+  register: promtail_compose
+
+- name: Pull promtail image
+  command: docker compose -p {{ promtail_project }} pull
+  args:
+    chdir: "{{ promtail_dir }}"
+  register: promtail_pull
+  changed_when: "'Pulled' in promtail_pull.stderr"
+
+- name: Start promtail
+  command: >-
+    docker compose -p {{ promtail_project }} up -d --remove-orphans
+    {{ '--force-recreate' if (promtail_config.changed or promtail_compose.changed) else '' }}
+  args:
+    chdir: "{{ promtail_dir }}"
+  register: promtail_up
+  changed_when: "'Started' in promtail_up.stderr or 'Recreated' in promtail_up.stderr or 'Created' in promtail_up.stderr"

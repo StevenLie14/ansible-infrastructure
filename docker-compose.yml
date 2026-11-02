@@ -13,3 +13,5 @@ services:
     - .:/workdir
     - ./templates/harbor.yml.j2:/root/.ansible/roles/robertdebock.harbor/templates/harbor.yml.j2
     working_dir: /workdir
+    # Copy SSH keys out of the Windows bind mount with 0600 (see the script).
+    command: ["bash", "-c", "bash scripts/sync-ssh-keys.sh; exec bash"]

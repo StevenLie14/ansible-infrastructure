@@ -1,0 +1,24 @@
+- name: Ensure jump user exists
+  user:
+    name: "{{ deploy_jump_user }}"
+    comment: Forgejo CI jump forward only
+    shell: /usr/sbin/nologin
+    password: "*"
+    create_home: yes
+    state: present
+
+- name: Create jump .ssh directory
+  file:
+    path: "/home/{{ deploy_jump_user }}/.ssh"
+    state: directory
+    owner: "{{ deploy_jump_user }}"
+    group: "{{ deploy_jump_user }}"
+    mode: "0700"
+
+- name: Write jump authorized_keys
+  template:
+    src: jump_authorized_keys.j2
+    dest: "/home/{{ deploy_jump_user }}/.ssh/authorized_keys"
+    owner: "{{ deploy_jump_user }}"
+    group: "{{ deploy_jump_user }}"
+    mode: "0600"

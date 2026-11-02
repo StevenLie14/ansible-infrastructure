@@ -1,3 +1,35 @@
+- name: Remove old domain Nginx site (symlink and config)
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/nginx/sites-enabled/{{ old_domain_name }}.conf
+    - /etc/nginx/sites-available/{{ old_domain_name }}.conf
+  when: old_domain_name is defined and old_domain_name != domain_name
+
+- name: Delete old domain SSL certificate
+  command: certbot delete --cert-name {{ old_domain_name }} --non-interactive
+  register: old_cert_delete
+  changed_when: "'Deleted all files' in old_cert_delete.stdout"
+  failed_when: old_cert_delete.rc != 0 and 'No certificate found' not in old_cert_delete.stdout and 'No certificate found' not in old_cert_delete.stderr
+  when: old_domain_name is defined and old_domain_name != domain_name
+
+- name: Find old domain Nginx logs (including rotated)
+  find:
+    paths: /var/log/nginx
+    patterns: "{{ old_domain_name }}_*"
+  register: old_domain_logs
+  when: old_domain_name is defined and old_domain_name != domain_name
+
+- name: Remove old domain Nginx logs
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ old_domain_logs.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: old_domain_name is defined and old_domain_name != domain_name
+
 - name: Deploy Nginx site configuration from template
   template:
     src: files/app_nginx.conf.j2

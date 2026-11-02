@@ -1,7 +1,21 @@
 forgejo_url: "{{ lookup('env', 'FORGEJO_URL') }}"
 forgejo_token: "{{ lookup('env', 'FORGEJO_TOKEN') }}"
-github_token: "{{ lookup('env', 'GITHUB_PAT') }}"
+# Set FORGEJO_VALIDATE_CERTS=false only when Forgejo uses an internal/self-signed CA.
+forgejo_validate_certs: "{{ (lookup('env', 'FORGEJO_VALIDATE_CERTS') | default('true', true)) | bool }}"
+# Read-only fine-grained PAT (Contents: Read) dedicated to mirroring. Falls back to GITHUB_PAT.
+github_token: "{{ lookup('env', 'GITHUB_MIRROR_PAT') | default(lookup('env', 'GITHUB_PAT'), true) }}"
 org_name: "{{ lookup('env', 'FORGEJO_ORG_NAME') }}"
 github_username: "{{ lookup('env', 'GITHUB_USERNAME') }}"
 mirror_interval: "{{ lookup('env', 'MIRROR_INTERVAL') | default('0h10m0s') }}"
 base_path: "/home/rnd/forgejo/data/git/repositories/{{ org_name }}"
+
+# GitHub org/user that owns the upstream repos. Defaults to the Forgejo org name.
+# Override with: -e github_org_name=some-other-org
+github_org_name: "{{ lookup('env', 'GITHUB_ORG_NAME') | default(org_name, true) }}"
+
+# Optional: limit the run to one or more repos instead of the whole org.
+# Single repo:    -e target_repo=my-service
+# Several repos:  -e '{"target_repos":["svc-a","svc-b"]}'
+# Empty = all repos in the org.
+target_repo: ""
+target_repos: []

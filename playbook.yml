@@ -53,11 +53,12 @@
   tags: [forgejo-secret]
   vars_files:
     - inventory/host_vars/forgejo-actions-secret.yml   
+    - inventory/host_vars/forgejo-ci-secrets.yml
   roles:
     - role: forgejo-secret
       tags: forgejo-secret
 
-- hosts: "{{ target_host | default('root-target-server') }}"
+- hosts: "{{ target_host | default('ci-runner') }}"
   become: true
   tags: [forgejo-runner]
   vars_files:
@@ -65,6 +66,24 @@
   roles:
     - role: forgejo-actions-runner
       tags: forgejo-runner
+
+- hosts: "{{ target_host | default('ci-runner') }}"
+  become: true
+  tags: [forgejo-runner-host]
+  vars_files:
+    - inventory/host_vars/forgejo-runner-host.yml
+  roles:
+    - role: forgejo-runner-host
+      tags: forgejo-runner-host
+
+- hosts: "{{ target_host | default('ci-runner') }}"
+  become: true
+  tags: [github-sync-runner]
+  vars_files:
+    - inventory/host_vars/github-sync-runner.yml
+  roles:
+    - role: github-sync-runner
+      tags: github-sync-runner
 
 - hosts: root-target-server
   tags: [forgejo-mirror]
@@ -82,3 +101,74 @@
   roles:
     - role: nginx
       tags: nginx
+
+
+- hosts: root-target-server
+  become: true
+  tags: [nginx-migrate]
+  vars_files:
+    - inventory/host_vars/nginx.yml
+  tasks:
+    - name: Migrate Nginx sites to the new domain
+      include_role:
+        name: nginx
+        tasks_from: migrate.yml
+
+# Per-repo AppRoles for CI and per-host AppRoles for deploy targets. Runs from
+# the control container against the Vault and Forgejo APIs.
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  tags: [vault-approle]
+  vars_files:
+    - inventory/host_vars/deploy-targets.yml
+    - inventory/host_vars/vault-approle.yml
+  roles:
+    - role: vault-approle
+      tags: vault-approle
+
+- hosts: deploy_targets
+  become: true
+  tags: [deploy-target]
+  vars_files:
+    - inventory/host_vars/deploy-targets.yml
+  roles:
+    - role: docker-compose-plugin
+      tags: docker-compose-plugin
+    - role: deploy-target
+      tags: deploy-target
+
+- hosts: docker-apps
+  become: true
+  tags: [promtail]
+  vars_files:
+    - inventory/host_vars/promtail-docker-apps.yml
+  roles:
+    - role: promtail
+      tags: promtail
+
+- hosts: galaxion
+  become: true
+  tags: [promtail]
+  vars_files:
+    - inventory/host_vars/promtail-galaxion.yml
+  roles:
+    - role: promtail
+      tags: promtail
+
+- hosts: galaxion
+  become: true
+  tags: [nginx-logrotate]
+  roles:
+    - role: nginx-logrotate
+      tags: nginx-logrotate
+
+- hosts: docker-apps
+  become: true
+  tags: [traefik]
+  vars:
+    traefik_web_bind: 10.22.64.191
+    traefik_web_port: 8088
+  roles:
+    - role: traefik
+      tags: traefik

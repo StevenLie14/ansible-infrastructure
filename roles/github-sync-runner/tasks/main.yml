@@ -1,0 +1,59 @@
+# The CA bundle is built by the forgejo-actions-runner role on the same host.
+- name: Check that the CA bundle exists
+  stat:
+    path: "{{ sync_runner_ca_bundle }}"
+  register: ca_bundle
+  failed_when: not ca_bundle.stat.exists
+
+- name: Create runner directories
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.owner }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: "{{ sync_runner_dir }}", owner: "0", mode: "0755" }
+    # uid 1001 is the runner user inside the image.
+    - { path: "{{ sync_runner_dir }}/state", owner: "1001", mode: "0700" }
+
+- name: Install entrypoint
+  copy:
+    src: entrypoint.sh
+    dest: "{{ sync_runner_dir }}/entrypoint.sh"
+    mode: "0755"
+
+- name: Template docker compose stack
+  template:
+    src: docker-compose.yml.j2
+    dest: "{{ sync_runner_dir }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Check if runner is already registered
+  stat:
+    path: "{{ sync_runner_dir }}/state/.runner"
+  register: sync_runner_registered
+
+- name: Require a registration token for the first run
+  assert:
+    that: sync_runner_token | length > 0
+    fail_msg: >-
+      Set GITHUB_RUNNER_TOKEN: GitHub org settings > Actions > Runners >
+      New self-hosted runner, copy the --token value (valid for one hour).
+  when: not sync_runner_registered.stat.exists
+
+- name: Register runner
+  command: docker compose run --rm -e RUNNER_TOKEN runner register
+  args:
+    chdir: "{{ sync_runner_dir }}"
+  environment:
+    RUNNER_TOKEN: "{{ sync_runner_token }}"
+  when: not sync_runner_registered.stat.exists
+  no_log: true
+
+- name: Start runner
+  command: docker compose up -d
+  args:
+    chdir: "{{ sync_runner_dir }}"
+  register: sync_runner_up
+  changed_when: "'Started' in sync_runner_up.stderr or 'Recreated' in sync_runner_up.stderr"

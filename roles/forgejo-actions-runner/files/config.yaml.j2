@@ -1,13 +1,33 @@
+log:
+  level: info
+
 runner:
-  file: .runner
-  capacity: 1
+  file: /data/.runner
+  capacity: {{ runner_capacity }}
+  timeout: 3h
+  # Jobs reach the docker-in-docker daemon, never the host's. A job that
+  # breaks out lands in the dind container on a build-only machine, with no
+  # production containers or secrets next to it.
   envs:
-    DOCKER_HOST: unix:///var/run/docker.sock
-  labels: {{ runner_labels | to_yaml }}
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: /certs/client
+    # *.slc.net uses an internal CA. /ca is mounted from the runner host.
+    SSL_CERT_FILE: /ca/bundle.pem
+    GIT_SSL_CAINFO: /ca/bundle.pem
+    NODE_EXTRA_CA_CERTS: /ca/slc-root-ca.crt
+  labels: {{ (runner_labels + (runner_extra_labels | default([]))) | to_json }}
+
+cache:
+  enabled: true
 
 container:
+  # "host" here is the dind container's network namespace, which is how job
+  # containers resolve the "docker" hostname. It is not the machine's network.
   network: host
-  privileged: true
-  options: "-v /var/run/docker.sock:/var/run/docker.sock"
+  privileged: false
+  options: "-v /certs/client:/certs/client:ro -v /ca:/ca:ro"
   valid_volumes:
-    - "/var/run/docker.sock"
+    - /certs/client
+    - /ca
+  force_pull: false

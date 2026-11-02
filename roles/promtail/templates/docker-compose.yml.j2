@@ -1,0 +1,11 @@
+services:
+  {{ promtail_service }}:
+    image: "{{ promtail_image }}"
+    volumes:
+{% for mount in promtail_mounts %}
+      - {{ mount }}
+{% endfor %}
+      - ./config.yaml:/etc/promtail/config.yml
+      - /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro
+    command: -config.file=/etc/promtail/config.yml
+    restart: unless-stopped

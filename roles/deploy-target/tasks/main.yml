@@ -1,0 +1,183 @@
+- name: Load settings for this host
+  set_fact:
+    target: "{{ deploy_targets[inventory_hostname] }}"
+
+- name: Refuse to configure apps without a real Vault path
+  assert:
+    that: "'TODO' not in item.vault_path"
+    fail_msg: "Set vault_path for {{ item.name }} in deploy-targets.yml first"
+    quiet: true
+  loop: "{{ target.apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# acl: Ansible needs setfacl to run the registry login as the deploy user.
+- name: Install tools deploy.sh needs
+  apt:
+    name: [jq, curl, util-linux, coreutils, acl]
+    state: present
+    update_cache: yes
+
+- name: Check that Docker Compose v2 is available
+  command: docker compose version --short
+  register: compose_version
+  changed_when: false
+  check_mode: false
+
+# deploy.sh needs `up --wait --wait-timeout` and `config --format json`.
+# Verified on 2.18.1 (syahdan, Docker 20.10.21); 2.14 lacks --wait-timeout.
+- name: Require a Compose version that supports up --wait --wait-timeout
+  assert:
+    that: compose_version.stdout is version('2.18.0', '>=')
+    fail_msg: "docker compose {{ compose_version.stdout }} is too old, deploy.sh needs 2.18 or newer"
+
+- name: Ensure deploy group exists
+  group:
+    name: "{{ deploy_user }}"
+    state: present
+
+# Membership of the docker group is root on this host. What keeps it in check
+# is that the only way in is the forced command in authorized_keys.
+- name: Ensure deploy user exists
+  user:
+    name: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    groups: docker
+    append: yes
+    home: "{{ deploy_home }}"
+    shell: /bin/bash
+    password: "!"
+    state: present
+
+- name: Create config and script directories
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /opt/deploy/bin, group: root, mode: "0755" }
+    - { path: /etc/deploy, group: "{{ deploy_user }}", mode: "0750" }
+    - { path: /etc/deploy/apps.d, group: "{{ deploy_user }}", mode: "0750" }
+
+- name: Create state directory
+  file:
+    path: "{{ deploy_state_root }}"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: "0750"
+
+- name: Install deploy script
+  copy:
+    src: deploy.sh
+    dest: /opt/deploy/bin/deploy.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install Vault CA certificate
+  copy:
+    src: "{{ deploy_vault_ca_file }}"
+    dest: /etc/deploy/vault-ca.pem
+    owner: root
+    group: "{{ deploy_user }}"
+    mode: "0644"
+
+- name: Write Vault AppRole credentials
+  template:
+    src: vault.env.j2
+    dest: /etc/deploy/vault.env
+    owner: root
+    group: "{{ deploy_user }}"
+    mode: "0640"
+  no_log: true
+
+- name: Write host settings
+  template:
+    src: deploy.env.j2
+    dest: /etc/deploy/deploy.env
+    owner: root
+    group: "{{ deploy_user }}"
+    mode: "0640"
+
+- name: Write per-app settings
+  template:
+    src: app.conf.j2
+    dest: "/etc/deploy/apps.d/{{ item.name }}.conf"
+    owner: root
+    group: "{{ deploy_user }}"
+    mode: "0640"
+  loop: "{{ target.apps }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# Root owns .ssh and authorized_keys, so even a shell as deploy could not add
+# a key without the forced command.
+- name: Create .ssh directory owned by root
+  file:
+    path: "{{ deploy_home }}/.ssh"
+    state: directory
+    owner: root
+    group: "{{ deploy_user }}"
+    mode: "0755"
+
+- name: Write authorized_keys with one forced command per repo key
+  template:
+    src: authorized_keys.j2
+    dest: "{{ deploy_home }}/.ssh/authorized_keys"
+    owner: root
+    group: "{{ deploy_user }}"
+    mode: "0644"
+
+- name: Create Docker certs directory for the registry
+  file:
+    path: "/etc/docker/certs.d/{{ deploy_registry_url }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Trust the SLC root CA for the registry
+  copy:
+    src: "{{ deploy_vault_ca_file }}"
+    dest: "/etc/docker/certs.d/{{ deploy_registry_url }}/ca.crt"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Log the deploy user in to the registry with the pull-only account
+  # Both go through the environment: Harbor robot names contain `$`
+  # (robot$project+name), which the shell would expand if templated inline.
+  shell: |
+    printf '%s' "$REGISTRY_PASSWORD" | docker login "$REGISTRY_HOST" -u "$REGISTRY_USERNAME" --password-stdin
+  environment:
+    REGISTRY_HOST: "{{ deploy_registry_url }}"
+    REGISTRY_USERNAME: "{{ deploy_registry_username }}"
+    REGISTRY_PASSWORD: "{{ deploy_registry_password }}"
+  become: true
+  become_user: "{{ deploy_user }}"
+  changed_when: false
+  no_log: true
+
+- name: Create Docker CLI plugin directory
+  file:
+    path: /usr/local/lib/docker/cli-plugins
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install docker-rollout plugin
+  get_url:
+    url: "https://raw.githubusercontent.com/wowu/docker-rollout/{{ deploy_rollout_version }}/docker-rollout"
+    dest: /usr/local/lib/docker/cli-plugins/docker-rollout
+    checksum: "sha256:{{ deploy_rollout_sha256 }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Set up the SSH jump account
+  include_tasks: jump.yml
+  when: target.jump is defined

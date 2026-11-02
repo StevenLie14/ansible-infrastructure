@@ -1,0 +1,47 @@
+- name: Read the installed Docker Compose version
+  command: docker compose version --short
+  register: compose_installed
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install Docker Compose plugin when it is older than the minimum
+  when: compose_installed.rc != 0 or compose_installed.stdout is version(compose_plugin_min_version, '<')
+  block:
+    - name: Download the Compose binary on the controller
+      get_url:
+        url: "{{ compose_plugin_url }}"
+        dest: "{{ compose_plugin_cache }}"
+        checksum: "sha256:{{ compose_plugin_sha256 }}"
+        mode: "0755"
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    # Docker looks here before /usr/libexec/docker/cli-plugins, so the
+    # packaged plugin stays in place untouched as the rollback.
+    - name: Create the local CLI plugin directory
+      file:
+        path: "{{ compose_plugin_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install the Compose plugin
+      copy:
+        src: "{{ compose_plugin_cache }}"
+        dest: "{{ compose_plugin_dir }}/docker-compose"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Read the Docker Compose version again
+      command: docker compose version --short
+      register: compose_after
+      changed_when: false
+
+    - name: Fail unless the new Compose is active
+      assert:
+        that: compose_after.stdout is version(compose_plugin_min_version, '>=')
+        fail_msg: "docker compose is still {{ compose_after.stdout }}"

@@ -1,0 +1,83 @@
+- name: "Write read-only policy {{ approle_name }}"
+  uri:
+    url: "{{ vault_addr }}/v1/sys/policies/acl/{{ approle_name }}"
+    method: PUT
+    body_format: json
+    body:
+      policy: |
+        {% for p in approle_paths %}
+        path "{{ p }}" {
+          capabilities = ["read"]
+        }
+        {% endfor %}
+    headers: { X-Vault-Token: "{{ vault_admin_token }}" }
+    ca_path: "{{ vault_ca_file }}"
+    status_code: [200, 204]
+  no_log: true
+
+- name: "Write AppRole {{ approle_name }}"
+  uri:
+    url: "{{ vault_addr }}/v1/auth/approle/role/{{ approle_name }}"
+    method: POST
+    body_format: json
+    body:
+      token_policies: ["{{ approle_name }}"]
+      token_ttl: "{{ vault_token_ttl }}"
+      token_max_ttl: "{{ vault_token_max_ttl }}"
+      secret_id_bound_cidrs: "{{ approle_cidrs }}"
+      token_bound_cidrs: "{{ approle_cidrs }}"
+    headers: { X-Vault-Token: "{{ vault_admin_token }}" }
+    ca_path: "{{ vault_ca_file }}"
+    status_code: [200, 204]
+  no_log: true
+
+- name: "Read role_id of {{ approle_name }}"
+  uri:
+    url: "{{ vault_addr }}/v1/auth/approle/role/{{ approle_name }}/role-id"
+    headers: { X-Vault-Token: "{{ vault_admin_token }}" }
+    ca_path: "{{ vault_ca_file }}"
+  register: approle_role_id
+  no_log: true
+
+# Every run issues a fresh secret_id, so re-running this role is the rotation.
+- name: "Issue a new secret_id for {{ approle_name }}"
+  uri:
+    url: "{{ vault_addr }}/v1/auth/approle/role/{{ approle_name }}/secret-id"
+    method: POST
+    headers: { X-Vault-Token: "{{ vault_admin_token }}" }
+    ca_path: "{{ vault_ca_file }}"
+  register: approle_secret_id
+  changed_when: true
+  no_log: true
+
+- name: "Push VAULT_ROLE_ID and VAULT_SECRET_ID to {{ forgejo_repo }}"
+  uri:
+    url: "{{ forgejo_url }}/api/v1/repos/{{ forgejo_org_name }}/{{ forgejo_repo }}/actions/secrets/{{ item.name }}"
+    method: PUT
+    validate_certs: "{{ forgejo_validate_certs }}"
+    status_code: [201, 204]
+    body_format: json
+    body: { data: "{{ item.value }}" }
+    headers:
+      Authorization: "token {{ forgejo_token }}"
+  loop:
+    - { name: VAULT_ROLE_ID, value: "{{ approle_role_id.json.data.role_id }}" }
+    - { name: VAULT_SECRET_ID, value: "{{ approle_secret_id.json.data.secret_id }}" }
+  register: approle_push
+  # Forgejo occasionally drops a request; one blip should not stop the run.
+  until: approle_push.status | default(0) in [201, 204]
+  retries: 3
+  delay: 5
+  when: forgejo_repo | length > 0
+  no_log: true
+
+- name: "Save credentials of {{ approle_name }} for the deploy-target role"
+  copy:
+    dest: "{{ vault_cred_dir }}/{{ approle_name }}.{{ item.name }}"
+    content: "{{ item.value }}"
+    mode: "0600"
+  loop:
+    - { name: role_id, value: "{{ approle_role_id.json.data.role_id }}" }
+    - { name: secret_id, value: "{{ approle_secret_id.json.data.secret_id }}" }
+  when: forgejo_repo | length == 0
+  no_log: true

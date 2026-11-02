@@ -1,15 +1,72 @@
+- name: Check whether the GitHub CLI is already installed
+  ansible.builtin.shell: command -v gh
+  register: gh_binary
+  changed_when: false
+  failed_when: false
+
 - name: Ensure GitHub CLI is installed
   apt:
     name: gh
     state: present
-    update_cache: yes
+    # A broken third-party apt repo on the target must not block installing gh.
+    update_cache: false
+  when: gh_binary.rc != 0
 
-- name: Set multiple GitHub repository secrets
+- name: Build the list of secrets to set
+  set_fact:
+    selected_secrets: >-
+      {{
+        [{'name': target_secret_key, 'value': target_secret_value}]
+        if (target_secret_key | default('') | trim | length > 0)
+        else (secrets | default([]))
+      }}
+
+- name: Fail when a key was given without a value
+  ansible.builtin.fail:
+    msg: "target_secret_key was set but target_secret_value is empty"
+  when:
+    - target_secret_key | default('') | trim | length > 0
+    - target_secret_value | default('') | trim | length == 0
+
+- name: Resolve the owner to work against
+  set_fact:
+    effective_owner: >-
+      {{ target_owner if (target_owner | default('') | trim | length > 0) else github_owner }}
+
+- name: Fetch every repository owned by the account
   ansible.builtin.shell: >
-    gh secret set {{ item.name }}
-    --body "{{ item.value }}"
-    --repo {{ github_owner }}/{{ github_repo }}
-  loop: "{{ secrets }}"
-  # no_log: true
+    gh repo list {{ effective_owner }}
+    --limit {{ github_repo_limit | default(200) }}
+    --no-archived
+    --json nameWithOwner
+    -q '.[].nameWithOwner'
+  register: gh_repo_list
+  changed_when: false
+  environment:
+    GH_TOKEN: "{{ github_token }}"
+  when: target_all_repos | default(false) | bool
+
+- name: Build the list of repositories to update
+  set_fact:
+    selected_repos: >-
+      {{
+        (gh_repo_list.stdout_lines | default([]))
+        if (target_all_repos | default(false) | bool)
+        else [effective_owner ~ '/' ~ github_repo]
+      }}
+
+- name: Fail when no repository was found
+  ansible.builtin.fail:
+    msg: "No repositories found for {{ effective_owner }}"
+  when: selected_repos | length == 0
+
+- name: Set GitHub repository secrets
+  ansible.builtin.shell: gh secret set {{ item.1.name }} --body "{{ secret_body }}" --repo {{ item.0 }}
+  vars:
+    secret_body: "{{ (vault_path_base ~ '/' ~ (item.0 | basename)) if (item.1.name == 'VAULT_PATH' and (target_all_repos | default(false) | bool)) else item.1.value }}"
+  loop: "{{ selected_repos | product(selected_secrets) | list }}"
+  loop_control:
+    label: "{{ item.0 }} / {{ item.1.name }}"
+  no_log: true
   environment:
     GH_TOKEN: "{{ github_token }}"

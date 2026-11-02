@@ -1,0 +1,6 @@
+- name: Migrate Nginx sites to new domain
+  include_tasks: migrate_site.yml
+  loop: "{{ nginx_migrate_sites }}"
+  loop_control:
+    loop_var: site
+    label: "{{ site.old }} -> {{ site.new }}"

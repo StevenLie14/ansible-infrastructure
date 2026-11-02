@@ -1,0 +1,19 @@
+forgejo_url: "{{ lookup('env', 'FORGEJO_URL') }}"
+forgejo_registration_token: "{{ lookup('env', 'FORGEJO_RUNNER_TOKEN') }}"
+
+host_runner_name: "ci-host-1"
+host_runner_capacity: 1
+host_runner_labels:
+  - "ci-host:host"
+host_runner_user: "forgejo-runner"
+host_runner_dir: "/opt/forgejo-runner-host"
+
+host_runner_version: "12.6.4"
+host_runner_sha256: "fe83c5d5fffbbb81f2f8d93f4638d098ad9c08b77aa6b5035856ae9643d25684"
+
+host_runner_node_version: "v22.23.4"
+host_runner_node_sha256: "1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce"
+
+host_runner_ca_file: "/workdir/keys/vault-ca.pem"
+host_runner_registry_host: "{{ lookup('env', 'REGISTRY_URL') }}"
+host_runner_swap_mb: 4096
