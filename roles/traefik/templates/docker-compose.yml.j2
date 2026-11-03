@@ -23,13 +23,14 @@ services:
       - --providers.docker.network={{ traefik_proxy_network }}
       - --entrypoints.web.address=:{{ traefik_web_port }}
       - --ping=true
+      - --ping.entrypoint=web
       - --accesslog=true
       - --log.level=INFO
     ports:
       - "{{ traefik_web_bind }}:{{ traefik_web_port }}:{{ traefik_web_port }}"
     networks: [socket, {{ traefik_proxy_network }}]
     healthcheck:
-      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      test: ["CMD", "traefik", "healthcheck", "--ping", "--ping.entrypoint=web", "--entrypoints.web.address=:{{ traefik_web_port }}"]
       interval: 10s
       timeout: 3s
       retries: 3
