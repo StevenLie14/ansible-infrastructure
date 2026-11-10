@@ -1,0 +1,96 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ci
+    concurrency:
+      group: build-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Git Checkout Repository
+        uses: https://forgejo.slc.net/rdt/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Import Build Variables from Vault
+        uses: https://forgejo.slc.net/rdt/vault-action@4c06c5ccf5c0761b6029f56cfb1dcf5565918a3b # v3.4.0
+        with:
+          url: ${{ secrets.VAULT_URL }}
+          method: approle
+          roleId: ${{ secrets.VAULT_ROLE_ID }}
+          secretId: ${{ secrets.VAULT_SECRET_ID }}
+          caCertificate: ${{ secrets.VAULT_CA_CERT }}
+          secrets: |
+            ${{ secrets.VAULT_PATH }} VITE_BASE_URL | VITE_BASE_URL
+
+      - name: Docker Login
+        uses: https://forgejo.slc.net/rdt/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ secrets.REGISTRY_URL }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Docker Build And Push
+        uses: https://forgejo.slc.net/rdt/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.REGISTRY_URL }}/slc-rdt/room-borrowing-anggrek-fe:${{ github.sha }}
+            ${{ secrets.REGISTRY_URL }}/slc-rdt/room-borrowing-anggrek-fe:latest
+          build-args: |
+            VITE_BASE_URL=${{ env.VITE_BASE_URL }}
+
+
+      # --- Versioning (additive, does not affect deploy below) ---
+      # Reads conventional commits since the last tag and decides whether this
+      # push deserves a new semver. chore/ci/docs commits do not bump a version
+      # and are skipped here, but still deploy normally via github.sha above.
+      - name: Configure git identity for release
+        run: |
+          git config user.name "release-bot"
+          git config user.email "release-bot@slc-rdt.local"
+          git remote set-url origin "https://x-access-token:${{ secrets.RELEASE_PUSH_TOKEN }}@forgejo.slc.net/slc-rdt/room-borrowing-anggrek-fe.git"
+
+      - name: Semantic Release
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
+        run: |
+          npm install --no-save --no-audit --no-fund             semantic-release             @semantic-release/commit-analyzer             @semantic-release/release-notes-generator             @semantic-release/exec
+          npx semantic-release || echo "semantic-release: no release produced"
+
+      - name: Tag image with release version
+        if: steps.release.outputs.version != ''
+        run: |
+          IMG=${{ secrets.REGISTRY_URL }}/slc-rdt/room-borrowing-anggrek-fe
+          docker pull "$IMG:${{ github.sha }}"
+          docker tag "$IMG:${{ github.sha }}" "$IMG:${{ steps.release.outputs.version }}"
+          docker push "$IMG:${{ steps.release.outputs.version }}"
+
+  deploy:
+    runs-on: ci
+    concurrency:
+      group: deploy-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: false
+    needs: build
+    steps:
+      - name: Git Checkout Repository
+        uses: https://forgejo.slc.net/rdt/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            "deploy@$DEPLOY_HOST" "deploy room-borrowing-anggrek-fe $GITHUB_SHA" < docker-compose.yml

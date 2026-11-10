@@ -1,0 +1,17 @@
+{
+  "branches": [
+    "master"
+  ],
+  "ci": false,
+  "tagFormat": "${version}",
+  "plugins": [
+    "@semantic-release/commit-analyzer",
+    "@semantic-release/release-notes-generator",
+    [
+      "@semantic-release/exec",
+      {
+        "publishCmd": "echo \"version=${nextRelease.version}\" >> \"$GITHUB_OUTPUT\"; echo \"${nextRelease.version}\" > /tmp/next_version.txt"
+      }
+    ]
+  ]
+}
