@@ -6,7 +6,7 @@
 #   command="/opt/deploy/bin/deploy.sh atlas-be",restrict ssh-ed25519 AAAA... slc-rdt/atlas-be
 #
 # The client then picks an action:
-#   ssh deploy@host "deploy atlas-be <40-hex commit sha>" < docker-compose.yml
+#   ssh deploy@host "deploy atlas-be <x.y.z release version | 40-hex commit sha>" < docker-compose.yml
 #   ssh deploy@host "rollback atlas-be"
 #   ssh deploy@host "stop atlas-be"
 #
@@ -29,10 +29,10 @@ log() { echo "deploy: $*" >&2; }
 [ "$#" -gt 0 ] || die "this key is not bound to any app"
 
 read -r -a req <<<"${SSH_ORIGINAL_COMMAND:-}"
-[ "${#req[@]}" -ge 2 ] && [ "${#req[@]}" -le 3 ] || die "usage: deploy <app> <sha> | rollback <app> | stop <app>"
+[ "${#req[@]}" -ge 2 ] && [ "${#req[@]}" -le 3 ] || die "usage: deploy <app> <version|sha> | rollback <app> | stop <app>"
 action=${req[0]}
 app=${req[1]}
-sha=${req[2]:-}
+ref=${req[2]:-}
 
 [[ $app =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] || die "invalid app name"
 bound=0
@@ -198,11 +198,14 @@ prune_releases() {
   keep_previous=$(cat "$base/previous" 2>/dev/null || true)
   ls -1t "$base/releases" | tail -n +$((KEEP_RELEASES + 1)) | while read -r old; do
     [ "$old" != "$keep_current" ] && [ "$old" != "$keep_previous" ] || continue
-    rm -rf -- "${base:?}/releases/$old"
-    # Every release pulls a :<sha> tag, which image prune never removes because
-    # it is still tagged. Drop the ones belonging to releases we just forgot.
-    docker image ls --format '{{.Repository}}:{{.Tag}}' | grep -F ":$old" |
+    # Every release pulls a :<tag> image, which image prune never removes
+    # because it is still tagged. Drop the ones this forgotten release used,
+    # taken from its own compose file: a version such as 1.0.1 is not unique
+    # across apps on the host the way a commit sha is.
+    compose "$base/releases/$old/docker-compose.yml" "$old" config --images 2>/dev/null </dev/null |
+      awk -v t=":$old" 'length($0) > length(t) && substr($0, length($0) - length(t) + 1) == t' |
       xargs -r docker image rm >/dev/null 2>&1 || true
+    rm -rf -- "${base:?}/releases/$old"
   done
 }
 
@@ -238,25 +241,26 @@ release_to() {
 
 case $action in
   deploy)
-    [[ $sha =~ ^[0-9a-f]{40}$ ]] || die "deploy needs a full 40-character commit sha"
-    rel=$base/releases/$sha
+    [[ $ref =~ ^[0-9a-f]{40}$ || $ref =~ ^[0-9]{1,5}.[0-9]{1,5}.[0-9]{1,5}$ ]] ||
+      die "deploy needs an x.y.z release version or a full 40-character commit sha"
+    rel=$base/releases/$ref
     mkdir -p "$rel"
     head -c $((MAX_COMPOSE_BYTES + 1)) >"$rel/docker-compose.yml.part"
     [ "$(stat -c %s "$rel/docker-compose.yml.part")" -le "$MAX_COMPOSE_BYTES" ] || die "compose file too large"
     [ -s "$rel/docker-compose.yml.part" ] || die "no compose file on stdin"
     mv "$rel/docker-compose.yml.part" "$rel/docker-compose.yml"
     load_secrets
-    release_to "$sha"
+    release_to "$ref"
     ;;
   rollback)
-    [ -z "$sha" ] || die "rollback takes no sha, it returns to the previous release"
+    [ -z "$ref" ] || die "rollback takes no version, it returns to the previous release"
     prev=$(cat "$base/previous" 2>/dev/null || true)
     [ -n "$prev" ] || die "$app has no previous release to return to"
     load_secrets
     release_to "$prev"
     ;;
   stop)
-    [ -z "$sha" ] || die "stop takes no sha"
+    [ -z "$ref" ] || die "stop takes no version"
     [ -f "$base/docker-compose.yml" ] || die "$app has never been deployed through this script"
     load_secrets
     compose "$base/docker-compose.yml" "$(cat "$base/current")" down --remove-orphans

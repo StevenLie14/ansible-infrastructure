@@ -30,7 +30,9 @@ services:
       # The SLC root CA: lets dind pull from and push to the internal registry,
       # and is handed on to job containers (see config.yaml).
       - ./ca:/ca:ro
-      - ./ca/slc-root-ca.crt:/etc/docker/certs.d/{{ runner_registry_host }}/ca.crt:ro
+{% for host in runner_registry_hosts %}
+      - ./ca/slc-root-ca.crt:/etc/docker/certs.d/{{ host }}/ca.crt:ro
+{% endfor %}
 
   runner:
     image: "{{ runner_image }}"

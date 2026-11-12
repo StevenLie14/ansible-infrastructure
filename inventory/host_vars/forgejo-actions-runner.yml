@@ -5,7 +5,12 @@ runner_dir: "/opt/forgejo-runner"
 
 # *.slc.net (Forgejo, Harbor, Vault) is signed by the SLC root CA.
 runner_ca_file: "/workdir/keys/vault-ca.pem"
-runner_registry_host: "{{ lookup('env', 'REGISTRY_URL') }}"
+# Same cert serves both hostnames (registry.slc.net direct, r.slc.net as the
+# short internal alias); dind only trusts a registry by exact hostname match
+# under /etc/docker/certs.d, so both need their own entry.
+runner_registry_hosts:
+  - "{{ lookup('env', 'REGISTRY_URL') }}"
+  - "r.slc.net"
 runner_name: "ci-dev"
 runner_capacity: 1
 

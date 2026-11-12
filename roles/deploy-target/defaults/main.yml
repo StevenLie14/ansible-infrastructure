@@ -2,6 +2,8 @@ deploy_user: "deploy"
 deploy_jump_user: "jump"
 deploy_home: "/home/{{ deploy_user }}"
 deploy_state_root: "/srv/deploy"
+# Hosts whose apt mirrors are dead (EOL Ubuntu) set this to false in the inventory.
+deploy_apt_update_cache: true
 
 # Where gen-deploy-keys.sh writes one keypair per repo (keys/ is gitignored).
 deploy_key_dir: "/workdir/keys/deploy"
@@ -9,6 +11,12 @@ deploy_key_dir: "/workdir/keys/deploy"
 deploy_vault_cred_dir: "/workdir/keys/vault"
 
 deploy_registry_url: "{{ lookup('env', 'REGISTRY_URL') }}"
+# Other names the same registry answers on. Each gets an /etc/hosts entry, CA
+# trust and a login, since Docker keys both by exact hostname.
+deploy_registry_aliases:
+  - host: "r.slc.net"
+    ip: "10.22.64.191"
+deploy_registry_hosts: "{{ [deploy_registry_url] + (deploy_registry_aliases | map(attribute='host') | list) }}"
 # Pull-only robot account. Never reuse the push account CI uses.
 deploy_registry_username: "{{ lookup('env', 'DEPLOY_REGISTRY_USERNAME') }}"
 deploy_registry_password: "{{ lookup('env', 'DEPLOY_REGISTRY_PASSWORD') }}"
