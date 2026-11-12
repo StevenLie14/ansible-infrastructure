@@ -54,6 +54,9 @@ deploy_targets:
       - { name: plagion-fe, vault_path: kv/data/plagion-fe }
       - { name: qman-be, vault_path: kv/data/qman-be }
       - { name: qman-fe, vault_path: kv/data/qman-fe }
+      - { name: postgres-database, vault_path: kv/data/postgres-database }
+      - { name: redis, vault_path: kv/data/redis }
+      - { name: seaweedfs, vault_path: kv/data/seaweedfs }
       # Uploaded files still live in the old runner's home. Move them to
       # /srv/deploy/request-slc-be/data/wwwroot and drop this allowance when convenient.
       - name: request-slc-be
@@ -109,6 +112,7 @@ deploy_targets:
       - { repo: monitoring, apps: [monitoring] }
       - { repo: prisma-mirror, apps: [prisma-mirror] }
       - { repo: lunar-forecaster, apps: [lunar-forecaster] }
+      - { repo: platform-services, apps: [postgres-database, redis, seaweedfs] }
     jump:
       allowed_from:
         - "{{ lookup('env', 'CI_RUNNER_HOST') }}"
