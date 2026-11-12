@@ -1,0 +1,18 @@
+services:
+  r-registry-proxy:
+    image: nginx:1.27-alpine
+    container_name: r-registry-proxy
+    restart: unless-stopped
+    command: ["nginx", "-c", "/etc/nginx/r/nginx.conf", "-g", "daemon off;"]
+    volumes:
+      - /opt/r-registry-proxy/conf:/etc/nginx/r:ro
+      - /opt/r-registry-proxy/certs:/certs:ro
+    ports:
+      - "443:443"
+      - "8002:8002"
+    networks:
+      - harbor_harbor
+
+networks:
+  harbor_harbor:
+    external: true
