@@ -138,7 +138,9 @@ deploy_targets:
       - { name: bee-chase-admin, vault_path: kv/data/bee-chase-admin }
       - { name: bee-chase-api, vault_path: kv/data/bee-chase-api, wait_timeout: 300 }
       - { name: bee-chase-client, vault_path: kv/data/bee-chase-client }
+      - { name: lab-global, project: lab-global-new, vault_path: kv/data/lab-slc-v2-global }
     repo_keys:
+      - { repo: lab-slc-v2, apps: [lab-global] }
       - { repo: all-new-binusmaya-frontend, apps: [bimay-prk-global] }
       - { repo: bee-chase-admin, apps: [bee-chase-admin] }
       - { repo: bee-chase-api, apps: [bee-chase-api] }
